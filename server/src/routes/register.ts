@@ -34,7 +34,10 @@ export function registerRoutes(deps: RegistrationDeps): Router {
     runChecks(ctx, REGISTRATION_CHECKS);
     const saved = saveRegistration(deps, ctx, response.response.transports ?? []);
     // Registering also logs the user in, with a fresh session ID (D22).
-    const session = startSession(deps, req, res, saved.userId);
+    const session = startSession(deps, req, res, {
+      id: saved.userId,
+      displayName: saved.displayName,
+    });
     const body: RegisterVerifyResponse = { ...saved, authAt: session.authAt };
     res.json(body);
   });

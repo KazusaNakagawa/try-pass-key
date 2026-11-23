@@ -7,13 +7,9 @@ export function sessionRoutes(deps: SessionDeps): Router {
 
   router.get('/api/me', requireSession(deps), (_req, res) => {
     const session = currentSession(res);
-    const user = deps.db
-      .prepare('SELECT display_name FROM users WHERE id = ?')
-      .get(session.userId) as { display_name: string } | undefined;
-    if (!user) throw new Error('session user no longer exists');
     const body: MeResponse = {
       userId: session.userId,
-      displayName: user.display_name,
+      displayName: session.displayName,
       authAt: session.authAt,
       stepupAt: session.stepupAt,
     };

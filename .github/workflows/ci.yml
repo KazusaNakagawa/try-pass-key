@@ -45,13 +45,14 @@ jobs:
           echo "$body"
           echo "$body" | grep -q '"status":"ok"'
           echo "$body" | grep -q '"credentials"'
-      - name: E2E (Playwright + virtual authenticator)
-        run: docker compose --profile e2e run --rm e2e
+      - name: E2E (Playwright + virtual authenticator, throwaway stack)
+        run: bash scripts/e2e.sh
       - name: Nothing leaked to the host checkout
         run: |
           # ./node_modules is only the empty mount point of the named volume.
           leaked="$(find node_modules -mindepth 1 -maxdepth 1 2>/dev/null; \
-            ls -d shared/node_modules server/node_modules web/node_modules .yarn 2>/dev/null; \
+            ls -d shared/node_modules server/node_modules web/node_modules e2e/node_modules \
+              e2e/test-results .yarn 2>/dev/null; \
             git ls-files --others --exclude-standard)"
           if [[ -n "$leaked" ]]; then
             echo "::error::Files were created on the host:"

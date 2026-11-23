@@ -53,6 +53,7 @@ describe('verification pipeline', () => {
       'L1',
       'L2',
       'L3',
+      'L4',
     ];
 
     it('runs exactly the login items from docs/01 §6', () => {

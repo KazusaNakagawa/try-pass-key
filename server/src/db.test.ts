@@ -131,4 +131,18 @@ describe('openDb', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('refuses a newer schema version (opened from an older checkout)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'db-test-'));
+    try {
+      const path = join(dir, 'app.db');
+      openDb(path).close();
+      const db = new DatabaseSync(path);
+      db.exec(`PRAGMA user_version = ${SCHEMA_VERSION + 1}`);
+      db.close();
+      expect(() => openDb(path)).toThrow(/newer/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

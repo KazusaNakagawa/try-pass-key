@@ -343,6 +343,7 @@ export function runChecks(ctx: CeremonyContext, checks: readonly Check[]) { /* �
 | L1 | `credentialId` が登録済み | 未知の鍵の拒否 |
 | L2 | 返ってきた `userHandle` と credential の所有者が一致 | credential とユーザーの取り違え防止 |
 | L3 | 保存した公開鍵で `authenticatorData ‖ SHA-256(clientDataJSON)` の署名を検証 | 署名偽造の拒否。認証の本体 |
+| L4 | BE が登録時に保存した値と同じで、BS=1 なら BE=1（WebAuthn L3 §7.2） | 登録した認証器とは別のものからの応答を受理し、BE/BS の記録が矛盾する（端末固定の鍵が同期型を名乗る、など） |
 
 ## 7. API 仕様
 
@@ -551,7 +552,7 @@ try-pass-key/
 - [ ] ホストに Docker 以外をインストールせずに、起動・テスト・初期化ができる
 - [ ] `docker compose down -v` の後に `up` すると、ユーザー0件のまっさらな状態に戻る
 - [ ] Chrome と Safari の両方で、登録とユーザー名なしログインが成功する
-- [ ] 6章の C1〜C5、A1〜A4、R1〜R5、L1〜L3 のそれぞれにテストがあり、すべて通る
+- [ ] 6章の C1〜C5、A1〜A4、R1〜R5、L1〜L4 のそれぞれにテストがあり、すべて通る
 - [ ] origin を改ざんした assertion、使用済み challenge の再送、別ブラウザに発行された challenge での応答、UV=0 の assertion が拒否されることをテストで示せる
 - [ ] ログイン済みでもステップアップなしの送金が `step_up_required` で拒否される
 - [ ] ステップアップ後に金額を変えた送金が拒否される

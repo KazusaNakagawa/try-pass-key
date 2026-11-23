@@ -23,6 +23,7 @@ const CHECK_ERROR_CODES: Record<CheckId, string> = {
   L1: 'unknown_credential',
   L2: 'user_handle_mismatch',
   L3: 'signature_invalid',
+  L4: 'backup_flags_mismatch',
 };
 
 export class HttpError extends Error {

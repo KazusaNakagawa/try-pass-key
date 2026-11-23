@@ -36,13 +36,16 @@ export interface SessionDeps {
  * had is destroyed first, so an ID planted before login (session fixation) is
  * never upgraded to an authenticated one.
  */
-export function startSession(deps: SessionDeps, req: Request, res: Response, userId: string) {
+export function startSession(
+  deps: SessionDeps,
+  req: Request,
+  res: Response,
+  user: { id: string; displayName: string },
+): Session {
   const previous = readCookie(req, SESSION_COOKIE);
   if (previous) destroySession(deps.db, previous);
-  const token = createSession(deps.db, userId, deps.now());
+  const { token, session } = createSession(deps.db, user, deps.now());
   res.cookie(SESSION_COOKIE, token, sessionCookieOptions(deps.config));
-  const session = loadSession(deps.db, token, deps.now());
-  if (!session) throw new Error('session was not created');
   return session;
 }
 
@@ -58,6 +61,12 @@ export function requireSession(deps: SessionDeps): RequestHandler {
     const token = readCookie(req, SESSION_COOKIE);
     const session = token ? loadSession(deps.db, token, deps.now()) : undefined;
     if (!session) {
+      // Expired, unknown, or its user is gone: drop the dead cookie too.
+      if (token)
+        res.clearCookie(SESSION_COOKIE, {
+          ...sessionCookieOptions(deps.config),
+          maxAge: undefined,
+        });
       next(new HttpError(401, 'unauthenticated', 'login required'));
       return;
     }

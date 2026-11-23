@@ -3,7 +3,12 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { AuthenticationResponse, LoginOptionsResponse } from '@app/shared';
 import { fromBase64Url, toBase64Url } from './bytes.js';
 import { consumeChallenge, findChallenge, issueChallenge } from './challenges.js';
-import type { AuthenticationContext, StoredCredential, UserRecord } from './checks/types.js';
+import {
+  CheckError,
+  type AuthenticationContext,
+  type StoredCredential,
+  type UserRecord,
+} from './checks/types.js';
 import { CHALLENGE_TTL_MS } from './constants.js';
 import { ParseError } from './errors.js';
 import { parseAuthenticatorData, parseClientDataJSON, type AuthenticatorData } from './parse.js';
@@ -147,11 +152,25 @@ export function saveAuthentication(deps: AuthenticationDeps, ctx: Authentication
     throw new Error('authentication context is incomplete');
   }
   const { signCount, flags } = ctx.authData;
-  deps.db
+  // A4 compared against the counter read when the context was built. Re-check it
+  // in the UPDATE itself: two logins with the same key (original and clone) can
+  // both pass A4, and only the first may record its counter.
+  const result = deps.db
     .prepare(
-      'UPDATE credentials SET sign_count = ?, backup_state = ?, last_used_at = ? WHERE id = ?',
+      `UPDATE credentials SET sign_count = ?, backup_state = ?, last_used_at = ?
+       WHERE id = ? AND (sign_count < ? OR (sign_count = 0 AND ? = 0))`,
     )
-    .run(signCount, flags.bs ? 1 : 0, deps.now().toISOString(), credential.id);
+    .run(
+      signCount,
+      flags.bs ? 1 : 0,
+      deps.now().toISOString(),
+      credential.id,
+      signCount,
+      signCount,
+    );
+  if (Number(result.changes) === 0) {
+    throw new CheckError('A4', 'signCount was updated by a concurrent login');
+  }
   return {
     user,
     credential: { id: toBase64Url(credential.id), signCount, backupState: flags.bs },

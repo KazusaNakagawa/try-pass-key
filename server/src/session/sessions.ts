@@ -9,6 +9,7 @@ export interface Session {
   /** SHA-256 of the token; the token itself is only in the cookie. */
   id: string;
   userId: string;
+  displayName: string;
   authAt: string;
   stepupAt: string | null;
   expiresAt: string;
@@ -17,6 +18,8 @@ export interface Session {
 interface SessionRow {
   id: string;
   user_id: string;
+  /** NULL when the user row is gone (e.g. deleted without foreign keys enabled). */
+  display_name: string | null;
   auth_at: string;
   last_seen_at: string;
   stepup_at: string | null;
@@ -27,21 +30,26 @@ function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('base64url');
 }
 
-/** Creates a session and returns the token to put in the cookie. */
-export function createSession(db: DatabaseSync, userId: string, now: Date): string {
+/** Creates a session. The token goes in the cookie; only its hash is stored. */
+export function createSession(
+  db: DatabaseSync,
+  user: { id: string; displayName: string },
+  now: Date,
+): { token: string; session: Session } {
   const token = randomBytes(32).toString('base64url');
-  const at = now.toISOString();
+  const session: Session = {
+    id: hashToken(token),
+    userId: user.id,
+    displayName: user.displayName,
+    authAt: now.toISOString(),
+    stepupAt: null,
+    expiresAt: new Date(now.getTime() + SESSION_ABSOLUTE_MS).toISOString(),
+  };
   db.prepare(
     `INSERT INTO sessions (id, user_id, auth_at, last_seen_at, expires_at)
      VALUES (?, ?, ?, ?, ?)`,
-  ).run(
-    hashToken(token),
-    userId,
-    at,
-    at,
-    new Date(now.getTime() + SESSION_ABSOLUTE_MS).toISOString(),
-  );
-  return token;
+  ).run(session.id, session.userId, session.authAt, session.authAt, session.expiresAt);
+  return { token, session };
 }
 
 /**
@@ -50,11 +58,16 @@ export function createSession(db: DatabaseSync, userId: string, now: Date): stri
  */
 export function loadSession(db: DatabaseSync, token: string, now: Date): Session | undefined {
   const id = hashToken(token);
-  const row = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as SessionRow | undefined;
+  const row = db
+    .prepare(
+      `SELECT s.*, u.display_name FROM sessions s
+       LEFT JOIN users u ON u.id = s.user_id WHERE s.id = ?`,
+    )
+    .get(id) as SessionRow | undefined;
   if (!row) return undefined;
   const idleExpired = new Date(row.last_seen_at).getTime() + SESSION_IDLE_MS <= now.getTime();
   const absoluteExpired = new Date(row.expires_at) <= now;
-  if (idleExpired || absoluteExpired) {
+  if (idleExpired || absoluteExpired || row.display_name === null) {
     db.prepare('DELETE FROM sessions WHERE id = ?').run(id);
     return undefined;
   }
@@ -62,6 +75,7 @@ export function loadSession(db: DatabaseSync, token: string, now: Date): Session
   return {
     id,
     userId: row.user_id,
+    displayName: row.display_name,
     authAt: row.auth_at,
     stepupAt: row.stepup_at,
     expiresAt: row.expires_at,

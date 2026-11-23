@@ -139,4 +139,14 @@ describe('session endpoints', () => {
     expect(browser.cookies.has('session')).toBe(false);
     expect((await browser.request('GET', '/api/me')).status).toBe(401);
   });
+
+  it('answers 401 and clears the cookie when the session user row is gone', async () => {
+    const { browser, userId } = await registerUser('test-user-8');
+    server.db.exec('PRAGMA foreign_keys = OFF');
+    server.db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    server.db.exec('PRAGMA foreign_keys = ON');
+    const res = await browser.request('GET', '/api/me');
+    expect(res.status).toBe(401);
+    expect(browser.cookies.has('session')).toBe(false);
+  });
 });

@@ -8,6 +8,10 @@ cd "$(git rev-parse --show-toplevel)"
 
 export COMPOSE_PROJECT_NAME=try-pass-key-e2e
 export WEB_PORT="${E2E_WEB_PORT:-5199}"
+# Exported variables take precedence over .env, which may point at a tunnel
+# after real-device testing. The E2E browser always opens localhost.
+export RP_ID=localhost
+export RP_ORIGIN="http://localhost:${WEB_PORT}"
 
 cleanup() {
   docker compose --profile e2e down -v --remove-orphans >/dev/null 2>&1 || true

@@ -84,7 +84,8 @@ export const SCHEMA_VERSION = 2;
 export class OutdatedSchemaError extends Error {
   constructor(found: number) {
     super(
-      `database schema version ${found} is older than ${SCHEMA_VERSION}. ` +
+      `database schema version ${found} does not match ${SCHEMA_VERSION} ` +
+        `(${found < SCHEMA_VERSION ? 'older' : 'newer, from another branch?'}). ` +
         'This PoC has no migrations: reset with `docker compose down -v` ' +
         '(and delete the old localhost passkeys from your password manager).',
     );
@@ -107,7 +108,9 @@ export function openDb(path: string): DatabaseSync {
     db.close();
     throw new OutdatedSchemaError(0);
   }
-  if (version !== 0 && version < SCHEMA_VERSION) {
+  // Newer is refused too: an older checkout would keep the newer tables and
+  // silently rewrite the version.
+  if (version !== 0 && version !== SCHEMA_VERSION) {
     db.close();
     throw new OutdatedSchemaError(version);
   }

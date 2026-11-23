@@ -26,7 +26,7 @@ export function loginRoutes(deps: SessionDeps): Router {
     const ctx = buildAuthenticationContext(deps, { response, ceremonyId });
     runChecks(ctx, AUTHENTICATION_CHECKS);
     const { user, credential } = saveAuthentication(deps, ctx);
-    const session = startSession(deps, req, res, user.id);
+    const session = startSession(deps, req, res, user);
 
     const body: LoginVerifyResponse = {
       me: {

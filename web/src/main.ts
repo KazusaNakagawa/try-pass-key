@@ -38,51 +38,68 @@ async function refreshMe(): Promise<MeResponse | undefined> {
   return me;
 }
 
+/** Consecutive Conditional UI failures; stops restarting if something fails instantly. */
+let conditionalFailures = 0;
+const MAX_CONDITIONAL_RESTARTS = 3;
+
 /** Waits for the user to pick a passkey from the username field's autofill. */
 async function startConditionalUI(): Promise<void> {
   if (!(await supportsConditionalUI())) return;
   try {
     const result = await loginWithPasskey(true);
+    conditionalFailures = 0;
     ui.loginResult.textContent = `ログインしました（オートフィル）\n${JSON.stringify(result, null, 2)}`;
     showMe(result.me);
   } catch (err) {
     // AbortError: another ceremony replaced this one. Not worth showing.
     if (err instanceof Error && err.name === 'AbortError') return;
     ui.loginResult.textContent = `ログインできませんでした\n${message(err)}`;
+    restartConditionalUI();
   }
 }
 
+/** Offers passkeys in the username field again after a failed or cancelled login. */
+function restartConditionalUI(): void {
+  conditionalFailures++;
+  if (conditionalFailures > MAX_CONDITIONAL_RESTARTS) return;
+  void startConditionalUI();
+}
+
 ui.loginButton.addEventListener('click', () => {
-  cancelConditionalUI();
   ui.loginResult.textContent = '認証器の操作を待っています...';
-  loginWithPasskey()
+  cancelConditionalUI()
+    .then(() => loginWithPasskey())
     .then((result) => {
+      conditionalFailures = 0;
       ui.loginResult.textContent = `ログインしました\n${JSON.stringify(result, null, 2)}`;
       showMe(result.me);
     })
     .catch((err: unknown) => {
       ui.loginResult.textContent = `ログインできませんでした\n${message(err)}`;
+      // Dismissing the passkey sheet or a server rejection: offer autofill again.
+      restartConditionalUI();
     });
 });
 
 ui.registerForm.addEventListener('submit', (event) => {
   event.preventDefault();
-  cancelConditionalUI();
   ui.registerResult.textContent = '認証器の操作を待っています...';
-  registerPasskey(ui.displayName.value)
+  cancelConditionalUI()
+    .then(() => registerPasskey(ui.displayName.value))
     .then(async (result) => {
       ui.registerResult.textContent = `登録しました\n${JSON.stringify(result, null, 2)}`;
       await refreshMe();
     })
     .catch((err: unknown) => {
       ui.registerResult.textContent = `登録できませんでした\n${message(err)}`;
-      void startConditionalUI();
+      restartConditionalUI();
     });
 });
 
 ui.logout.addEventListener('click', () => {
   void fetch('/api/logout', { method: 'POST' }).then(async () => {
     ui.loginResult.textContent = '';
+    conditionalFailures = 0;
     await refreshMe();
     void startConditionalUI();
   });

@@ -10,6 +10,7 @@ import { C5 } from './checks/C5.js';
 import { L1 } from './checks/L1.js';
 import { L2 } from './checks/L2.js';
 import { L3 } from './checks/L3.js';
+import { L4 } from './checks/L4.js';
 import { R1 } from './checks/R1.js';
 import { R2 } from './checks/R2.js';
 import { R3 } from './checks/R3.js';
@@ -45,8 +46,8 @@ export const REGISTRATION_CHECKS: readonly Check<RegistrationContext>[] = Object
 /**
  * Every check a login must pass, in order. Same rules as REGISTRATION_CHECKS:
  * C4 first, no way to turn a check off. L1 → L2 → L3 because L2 and L3 need the
- * stored credential, and A4 last because the counter means nothing until the
- * signature is known to be genuine.
+ * stored credential; L4 and A4 after L3 because the flags and the counter mean
+ * nothing until the signature is known to be genuine.
  */
 export const AUTHENTICATION_CHECKS: readonly Check<AuthenticationContext>[] = Object.freeze([
   C4,
@@ -60,6 +61,7 @@ export const AUTHENTICATION_CHECKS: readonly Check<AuthenticationContext>[] = Ob
   L1,
   L2,
   L3,
+  L4,
   A4,
 ]);
 

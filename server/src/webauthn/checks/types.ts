@@ -19,7 +19,8 @@ export type CheckId =
   | 'R5'
   | 'L1'
   | 'L2'
-  | 'L3';
+  | 'L3'
+  | 'L4';
 
 export class CheckError extends Error {
   constructor(

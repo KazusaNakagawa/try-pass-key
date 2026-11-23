@@ -13,8 +13,10 @@ import {
   type Check,
   type CheckId,
 } from '../src/webauthn/checks/types.js';
+import { saveAuthentication } from '../src/webauthn/authentication.js';
 import { AUTHENTICATION_CHECKS, runChecks } from '../src/webauthn/pipeline.js';
 import { LoginHarness } from './login-harness.js';
+import { SoftAuthenticator } from './soft-authenticator.js';
 
 type Checks = readonly Check<AuthenticationContext>[];
 
@@ -126,6 +128,17 @@ const scenarios: Scenario[] = [
     },
   },
   {
+    check: 'L4',
+    attack: 'a device-bound credential (BE=0) reports itself as synced (BE=1, BS=1)',
+    rejectedBy: 'L4',
+    run: (checks) => {
+      const h = new LoginHarness();
+      const deviceBound = new SoftAuthenticator({ flags: { be: false, bs: false } });
+      const user = h.register('test-user-1', deviceBound);
+      runChecks(h.validLoginContext(user, { flags: { be: true, bs: true } }), checks);
+    },
+  },
+  {
     check: 'A4',
     attack: 'a cloned authenticator reuses a signCount that was already seen',
     rejectedBy: 'A4',
@@ -189,5 +202,23 @@ describe('login attacks', () => {
     // The session is created for the user that userHandle names.
     expect(ctx.userByHandle?.id).toBe(victim.userId);
     expect(ctx.credential?.userId).toBe(attacker.userId);
+  });
+
+  it('A4 also holds against two concurrent logins with the same counter (original and clone)', () => {
+    const h = new LoginHarness();
+    const user = h.register();
+    h.setStoredSignCount(user, 5);
+    // Both contexts read signCount 5 and both pass A4 with 6.
+    const original = h.validLoginContext(user, { signCount: 6 });
+    const clone = h.validLoginContext(user, { signCount: 6 });
+    runChecks(original, AUTHENTICATION_CHECKS);
+    runChecks(clone, AUTHENTICATION_CHECKS);
+    // Only the first may record its counter; the guarded UPDATE rejects the second.
+    saveAuthentication(h.deps, original);
+    expect(
+      rejection(() => {
+        saveAuthentication(h.deps, clone);
+      }),
+    ).toBe('A4');
   });
 });
