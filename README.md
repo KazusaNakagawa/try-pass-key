@@ -39,6 +39,7 @@ docker compose down -v                  # DB・依存ごと完全に初期化
 | [docs/00-background.md](docs/00-background.md) | 背景と問題意識 |
 | [docs/01-architecture-proposal-poc.md](docs/01-architecture-proposal-poc.md) | アーキテクチャ提案（API、データモデル、検証項目、マイルストーン） |
 | [docs/02-knowledge-passkey.md](docs/02-knowledge-passkey.md) | 調査ナレッジ（同期パスキーのリスク、他の認証方式） |
+| [docs/03-hands-on-verification.md](docs/03-hands-on-verification.md) | 動作確認の手順（実機での登録・ログイン、DB の中身、セッションと Cookie） |
 | [docs/decisions.md](docs/decisions.md) | 判断の記録 |
 | [docs/worklog/](docs/worklog/) | 作業ログ |
 
