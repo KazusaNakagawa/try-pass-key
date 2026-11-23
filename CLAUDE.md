@@ -35,7 +35,9 @@ This repository is public.
 - Product names (1Password, iCloud, Chrome, etc.) are fine.
 - In screenshots, hide browser profile names and avatars, real accounts shown in password manager lists, and tunnel URLs (ngrok etc.).
 - Use test display names such as `test-user-1` for PoC users.
-- Run a grep for personal names, paths, and emails before committing.
+- Before committing, run `MASK_PATTERNS="$(cat ~/.config/try-pass-key/mask-patterns)" bash scripts/mask-check.sh`. CI runs the same check with the `MASK_PATTERNS` secret.
+  - The pattern file lives outside the repository and contains personal information. Never print it (`cat` to the conversation, logs, commits) or pass its values as command arguments.
+  - If the file is missing (other machine, cloud session), run the script without `MASK_PATTERNS` and also grep manually for personal names; tell the user the private patterns were not checked.
 
 ## Invariants (once implementation starts)
 
