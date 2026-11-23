@@ -25,17 +25,17 @@ CREATE TABLE IF NOT EXISTS credentials (
   transports      TEXT NOT NULL DEFAULT '[]',  -- JSON array
   backup_eligible INTEGER NOT NULL,            -- BE flag (0/1)
   backup_state    INTEGER NOT NULL,            -- BS flag (0/1)
-  aaguid          TEXT NOT NULL,               -- all zeros with attestation "none"
+  aaguid          TEXT NOT NULL,               -- authenticator model; not always zero with "none" (1Password sends its own)
   created_at      TEXT NOT NULL,
   last_used_at    TEXT
 );
 CREATE INDEX IF NOT EXISTS credentials_user_id ON credentials(user_id);
 
--- One row per ceremony. Its id is returned in the "ceremony" cookie (C5) and the
--- row is consumed with DELETE ... RETURNING (C4).
+-- One row per ceremony. Looked up by the challenge value in clientDataJSON (C2),
+-- its id must equal the "ceremony" cookie (C5), and it is deleted on first use (C4).
 CREATE TABLE IF NOT EXISTS challenges (
   id           TEXT NOT NULL PRIMARY KEY,
-  challenge    BLOB NOT NULL,
+  challenge    BLOB NOT NULL UNIQUE,
   purpose      TEXT NOT NULL CHECK (purpose IN ('register', 'login', 'stepup')),
   user_handle  BLOB,                           -- register only
   display_name TEXT,                           -- register only

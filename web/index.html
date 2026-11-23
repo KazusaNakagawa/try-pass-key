@@ -4,11 +4,31 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>try-pass-key</title>
+    <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <main>
       <h1>try-pass-key</h1>
       <p>パスキー（WebAuthn）学習用 PoC</p>
+
+      <section>
+        <h2>パスキーを作成</h2>
+        <form id="register-form">
+          <label>
+            表示名（認証器に保存・同期されます。テスト用の名前を使ってください）
+            <input
+              id="display-name"
+              name="displayName"
+              value="test-user-1"
+              maxlength="64"
+              required
+            />
+          </label>
+          <button type="submit">パスキーを作成</button>
+        </form>
+        <pre id="register-result" aria-live="polite"></pre>
+      </section>
+
       <section>
         <h2>サーバー状態</h2>
         <pre id="health">確認中...</pre>

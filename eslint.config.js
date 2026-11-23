@@ -24,6 +24,8 @@ export default defineConfig(
     },
     rules: {
       '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
+      // Express identifies error handlers by arity, so unused leading-underscore args are intentional.
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     },
   },
 
@@ -49,6 +51,9 @@ export default defineConfig(
       ...vitest.configs.recommended.rules,
       'vitest/no-disabled-tests': 'error',
       'vitest/no-focused-tests': 'error',
+      // expectRejectedBy (server/test/expect-check.ts) asserts too.
+      'vitest/expect-expect': ['error', { assertFunctionNames: ['expect', 'expectRejectedBy'] }],
+      'sonarjs/assertions-in-tests': 'off',
     },
   },
 
