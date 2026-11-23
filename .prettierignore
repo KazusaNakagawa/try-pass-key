@@ -1,0 +1,5 @@
+node_modules/
+.yarn/
+yarn.lock
+# Docs are hand-written Japanese prose with tables; do not reformat.
+**/*.md

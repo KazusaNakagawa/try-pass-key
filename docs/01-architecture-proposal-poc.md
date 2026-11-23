@@ -84,7 +84,7 @@ flowchart LR
 | 層 | 採用 | 理由 |
 |---|---|---|
 | 言語 | TypeScript（ESM、サーバー・クライアント共通） | 型でWebAuthnの構造体を追いやすい。AIの学習量が多く、型エラーがAIへのフィードバックになる |
-| 実行 | Node.js LTS + `tsx` | ビルドなしで `.ts` を直接実行でき、試行錯誤が速い |
+| 実行 | Node.js 26（Active LTS）+ `tsx` | ビルドなしで `.ts` を直接実行でき、試行錯誤が速い。`node:sqlite` がフラグなしで使える。Node 25 以降は corepack が同梱されないため、Dockerfile で入れる |
 | サーバー | Express 5 | AIの学習量が最も多く、情報も豊富 |
 | スキーマ | zod | APIの入出力・設定・DB行を zod で定義し、型とランタイム検証を1か所にまとめる。AIが仕様を読む起点にもなる |
 | WebAuthn 検証 | 自前の検証パイプライン（6.0）+ `cbor-x`（CBOR デコードのみ） | 検証を1項目ずつ外して攻撃が通ることを示すには、検証を自分で持つ必要がある。CBOR の文法は学習価値が低いのでライブラリに任せ、authenticatorData の分解・COSE 鍵の変換・各検証は自前で書く |
@@ -96,7 +96,7 @@ flowchart LR
 | パッケージ管理 | Yarn 4（corepack）の workspaces、`nodeLinker: node-modules` | lockfile で依存を固定する。`server` / `web` / `shared` / `e2e` を1リポジトリで管理し、`shared` の zod を両方から import できる。PnP は AI が `node_modules` を読めずツール相性も悪いため使わない |
 | 実行環境 | Docker / Docker Compose | ホストの global 環境を汚さず、壊しても作り直せる |
 
-バージョンは実装開始時点の最新安定版で固定する。Node.js もベースイメージのタグ（例: `node:<LTS>-slim`）で固定する。
+バージョンは実装開始時点の最新安定版で固定する。Node.js もベースイメージのタグ（`node:26.13.1-slim`）で固定する。例外として TypeScript は 6.0 系にする。7.0（Go 実装）は typescript-eslint が未対応のため（D16）。
 
 ### 実行環境（Docker）
 
@@ -106,7 +106,7 @@ flowchart LR
 
 - ホストに Node.js、npm パッケージ、SQLite を入れない。`yarn install` もテストもコンテナ内で実行する。
 - リポジトリ全体を `/app` にバインドマウントしてホットリロードする。ルートの `node_modules`（`/app/node_modules`）と SQLite のDBファイルは名前付きボリュームに置き、ホストのディレクトリには作らない。
-- 開発用イメージは ルートの `Dockerfile` 1つにし、`server` と `web` で共用する。E2E だけは `@playwright/test` とバージョンを揃えた Playwright 公式イメージで別サービスにする。
+- 開発用イメージは ルートの `Dockerfile` 1つにし、`deps` / `server` / `web` で共用する。`yarn install` は一回限りの `deps` サービスが行い、`server` と `web` はその完了を待って起動する。共有ボリュームへの同時インストールを避けるため（D17）。E2E だけは `@playwright/test` とバージョンを揃えた Playwright 公式イメージで別サービスにする。
 - 依存のバージョン衝突があると、workspace 配下（`server/node_modules` 等）にも `node_modules` が作られ、バインドマウント経由でホストに出てくる。M1 の完了条件で、これが作られていないことを確認する。
 - `docker compose down -v` でDB・依存パッケージごと完全に初期化できる状態を保つ。壊したら消して作り直す、を前提にする。
 - ブラウザと認証器（Touch ID 等）はホスト側のものを使う。WebAuthn はブラウザと OS の機能なので、コンテナに入れる必要はない。
@@ -137,9 +137,10 @@ flowchart LR
 
 | サービス | 役割 | 公開ポート | マウント |
 |---|---|---|---|
-| `web` | Vite 開発サーバー。`/api` を `server` へプロキシ | `127.0.0.1:5173` | `.`（`/app`）、`node_modules` |
-| `server` | Express API | 公開しない（`web` 経由のみ） | `.`（`/app`）、`node_modules`、`sqlite-data` |
-| `e2e`（任意） | Playwright のヘッドレス Chromium。`profiles` で必要時のみ起動 | なし | `.`（`/app`）、`e2e_node_modules`（イメージが違うため別ボリューム） |
+| `deps` | `yarn install` を実行して終了する。CI（`CI=true`）では lockfile を書き換えない immutable install になる | なし | `.`（`/app`）、`node_modules`、`yarn_cache` |
+| `web` | Vite 開発サーバー。`/api` を `server` へプロキシ | `127.0.0.1:${WEB_PORT:-5173}` | `.`（`/app`）、`node_modules` |
+| `server` | Express API | 公開しない（`web` 経由のみ） | `.`（`/app`）、`node_modules`、`sqlite_data` |
+| `e2e`（任意、M3 で追加） | Playwright のヘッドレス Chromium。`profiles` で必要時のみ起動 | なし | `.`（`/app`）、`e2e_node_modules`（イメージが違うため別ボリューム） |
 | `tunnel`（任意） | ngrok / cloudflared。クロスデバイス認証を試すときだけ `profiles` で起動 | なし | なし |
 
 **WebAuthn との整合**
@@ -607,6 +608,7 @@ try-pass-key/
 | K3 | RP ID を変えると既存のパスキーがすべて使えなくなる | トンネル利用時に毎回作り直しになる | `.env` で切り替え、切り替え時はDBも初期化する手順を `CLAUDE.md` に書く |
 | K4 | AI がテストを通すために検証を緩める | 6章の検証が抜けたまま「動く」状態になる。学習目的が崩れる | 6章の各項目に対応する攻撃再現テストを先に書き（TDD）、`CLAUDE.md` に「攻撃再現テストを消す・skip する変更は禁止」と明記する |
 | K5 | `/api/debug/last-ceremony` が他のコードに混ざって残る | 本番に持ち込むと情報漏洩になる | `NODE_ENV=development` のときだけルートを登録する。PoCを本番に流用しない前提も `CLAUDE.md` に書く |
-| K6 | macOS の Docker でバインドマウントのファイル監視が遅い・効かない | ホットリロードが不安定になる | Vite と `tsx watch` をポーリングモードで動かす設定を用意する |
+| K6 | macOS の Docker でバインドマウントのファイル監視が遅い・効かない | ホットリロードが不安定になる。M1 で実際に発生した（Rancher Desktop。変更イベントが届かず、ファイルの追加・削除がコンテナから見えるまで約10〜12秒遅れる） | ポーリングを既定にした（`WATCH_POLLING=true`。tsx は `CHOKIDAR_USEPOLLING`、Vite は `server.watch.usePolling`）。遅延はホストのファイル共有方式が原因なので、気になる場合は Docker 実行環境の共有方式（virtiofs 等）を見直す |
 | K7 | Safari と Chrome で挙動が違う（Conditional UI、エラーの出方） | Chrome だけで作ると Safari で動かない | 12章の受け入れ基準どおり両方で確認する。差分は M8 の振り返りに記録する |
 | K8 | 一時 Cookie `ceremony` は1つしか持てない | 複数タブで同時に ceremony を始めると、後のタブが前のタブの challenge を上書きし、前のタブは `invalid_challenge` になる。Conditional UI はページ表示時に options を取るので起きやすい | PoC では失敗させ、options を取り直す（Conditional UI は再起動）。本番で問題になる場合は Cookie に複数の行IDを持たせる |
+| K9 | ブラウザは `localhost` を IPv6 の `::1` から試す。別の開発サーバーが `[::1]:5173` で待ち受けていると、そちらが応答する | 本PoCではなく別アプリの画面や API が返る。Docker 側は衝突を報告しない（M1 で発生） | `.env` の `WEB_PORT` で空いているポートに変える（`RP_ORIGIN` も自動で追従する）。画面の「サーバー状態」に `status: ok` とテーブル一覧が出ることで見分ける |

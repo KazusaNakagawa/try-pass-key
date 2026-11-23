@@ -1,0 +1,90 @@
+name: try-pass-key
+
+x-build: &build
+  build: .
+  image: try-pass-key-dev:local
+  working_dir: /app
+
+services:
+  # One-shot: installs dependencies into the shared node_modules volume.
+  # server and web wait for it, so they never race on `yarn install`.
+  # With CI=true (GitHub Actions), Yarn runs an immutable install.
+  deps:
+    <<: *build
+    command: yarn install
+    environment:
+      CI: ${CI:-}
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      - yarn_cache:/root/.yarn/berry
+
+  server:
+    <<: *build
+    command: yarn workspace @app/server dev
+    depends_on:
+      deps:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: development
+      PORT: '3000'
+      RP_ID: ${RP_ID:-localhost}
+      RP_ORIGIN: ${RP_ORIGIN:-http://localhost:${WEB_PORT:-5173}}
+      DB_PATH: /data/app.db
+      # Docker on macOS does not deliver file change events on bind mounts
+      # (docs/01 K6). tsx watch uses chokidar, which polls when this is true.
+      CHOKIDAR_USEPOLLING: ${WATCH_POLLING:-true}
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      - yarn_cache:/root/.yarn/berry
+      - sqlite_data:/data
+    # Not published: the browser reaches it only through the web proxy.
+    expose:
+      - '3000'
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  web:
+    <<: *build
+    command: yarn workspace @app/web dev
+    depends_on:
+      deps:
+        condition: service_completed_successfully
+      server:
+        condition: service_started
+    environment:
+      API_TARGET: http://server:3000
+      VITE_USE_POLLING: ${WATCH_POLLING:-true}
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      - yarn_cache:/root/.yarn/berry
+    # Bound to 127.0.0.1 only: not reachable from other machines on the LAN.
+    # Open http://localhost:<WEB_PORT> (not 127.0.0.1) so the RP ID matches.
+    # Pitfall: browsers try ::1 first for "localhost". If another local dev server
+    # listens on [::1]:<WEB_PORT>, it answers instead of this one, and Docker
+    # Desktop does not report the conflict. Set WEB_PORT in .env to a free port.
+    ports:
+      - '127.0.0.1:${WEB_PORT:-5173}:5173'
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:5173/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  node_modules:
+  yarn_cache:
+  sqlite_data:

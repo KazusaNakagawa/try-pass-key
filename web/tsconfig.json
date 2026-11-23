@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    // Browser code only: no Node types, so process.env / Buffer fail to typecheck.
+    "types": ["vite/client"]
+  },
+  "include": ["src"]
+}

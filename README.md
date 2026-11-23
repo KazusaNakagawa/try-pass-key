@@ -5,7 +5,7 @@
 正規ユーザーとしてシステムを操作され資産を抜かれる「二次被害」への備えとして、ログイン時のパスキー認証に加え、送金など高リスク操作の直前に再認証するステップアップ認証まで実装します。背景は [docs/00-background.md](docs/00-background.md) を参照してください。
 
 > [!NOTE]
-> 現在は設計段階です。実装はまだありません。進捗は [マイルストーン](docs/01-architecture-proposal-poc.md#11-マイルストーン) を参照してください。
+> 現在は M1（骨組み: Docker で起動し SQLite のスキーマを作るところ）まで実装済みです。進捗は [マイルストーン](docs/01-architecture-proposal-poc.md#11-マイルストーン) を参照してください。
 
 ## このPoCで確かめること
 
@@ -18,7 +18,7 @@
 
 TypeScript / Express / Vite / SQLite を Docker Compose で動かします。ホストに必要なのは Docker とブラウザだけです。詳細は [全体構成](docs/01-architecture-proposal-poc.md#4-全体構成) を参照してください。
 
-## 使い方（予定）
+## 使い方
 
 ```bash
 docker compose up -d                    # 起動 → http://localhost:5173
@@ -27,6 +27,8 @@ docker compose down -v                  # DB・依存ごと完全に初期化
 ```
 
 `127.0.0.1` ではなく `localhost` で開いてください。パスキーはドメインに紐づくため、両者は別物として扱われます。
+
+別の開発サーバーが 5173 番を使っていると、`localhost:5173` でそちらが表示されることがあります。その場合は `.env.example` を `.env` にコピーし、`WEB_PORT` を空いているポートに変えてください。
 
 ## ドキュメント
 
