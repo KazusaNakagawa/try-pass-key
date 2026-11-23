@@ -22,7 +22,7 @@ docker compose up -d --wait
 
 ### 登録
 
-1. 「パスキーを作成」の表示名はテスト用の名前（`test-user-1` など）のままにする。表示名は認証器に保存され、同期される
+1. 「パスキーを作成」の表示名はテスト用の名前（`test-user-1` など）のままにする。表示名は認証器に保存される（同期型なら他の端末にも渡ると考えられるが、未確認）
 2. 「パスキーを作成」を押し、1Password や Touch ID で保存する
 3. 「登録しました」と結果が出て、「ログイン状態」が「ログイン中」になる（登録するとログインもする）
 
@@ -111,7 +111,7 @@ ES256 の鍵は `A5 01 02 03 26 20 01 21 58 20 …` で始まる。
 | 列 | 見どころ |
 |---|---|
 | `credentials.aaguid` | 認証器の種類。1Password は `bada5566-a7aa-401f-bd96-45619a55120d`（`attestation: "none"` でもゼロにならない） |
-| `credentials.sign_count` | 同期パスキー（1Password、iCloud）は 0 のまま。端末固定の鍵はログインのたびに増える（A4） |
+| `credentials.sign_count` | 1Password の同期パスキーは 0 のままだった（iCloud は未確認）。端末固定の鍵はログインのたびに増える（A4） |
 | `credentials.backup_eligible` / `backup_state` | BE / BS。同期できる鍵か、同期済みか |
 | `credentials.last_used_at` | ログインの検証を通るたびに更新される |
 | `challenges` | 進行中・中断した ceremony の分だけ残る。期限切れは1分ごとに消える |
