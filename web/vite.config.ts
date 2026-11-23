@@ -1,6 +1,9 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  // Keep Vite's cache in the shared node_modules volume, not in web/node_modules
+  // (which would be created on the host through the bind mount).
+  cacheDir: '../node_modules/.vite/web',
   server: {
     // Listen on all interfaces inside the container; compose publishes it on 127.0.0.1 only.
     host: true,
