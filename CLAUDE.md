@@ -27,6 +27,7 @@ Run everything through `docker compose` (never on the host).
 | Add a dependency | `docker compose run --rm server yarn workspace @app/<server\|web\|shared> add <pkg>@<exact-version>` |
 | Format | `docker compose run --rm server yarn format` |
 | Inspect the DB | `docker compose exec server sqlite3 /data/app.db` (run `PRAGMA foreign_keys = ON;` first before deleting, or ON DELETE CASCADE does not fire) |
+| Copy a consistent DB snapshot out of the volume for a desktop DB client (default ~/Downloads; refuses paths inside the repo) | `bash scripts/db-snapshot.sh [dest]` |
 | Reset everything (DB, node_modules). Also required when the server refuses an outdated DB schema | `docker compose down -v` |
 
 Never run the E2E service against the development stack (`docker compose --profile e2e run e2e`): it registers test users in the development DB, and a different `WEB_PORT` makes compose recreate the running containers. `scripts/e2e.sh` uses its own project name, volumes and port, and removes them afterwards.

@@ -24,6 +24,7 @@ TypeScript / Express / Vite / SQLite を Docker Compose で動かします。ホ
 docker compose up -d                    # 起動 → http://localhost:5173
 docker compose run --rm server yarn check # 型検査・lint・テスト
 bash scripts/e2e.sh                     # E2E（仮想認証器。使い捨てのスタックで実行）
+bash scripts/db-snapshot.sh             # DB の写しを ~/Downloads に取り出す（DB クライアントで見る用）
 docker compose down -v                  # DB・依存ごと完全に初期化
 ```
 
