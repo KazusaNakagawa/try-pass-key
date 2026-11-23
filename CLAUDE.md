@@ -23,11 +23,13 @@ Run everything through `docker compose` (never on the host).
 |---|---|
 | Start (web on http://localhost:5173) | `docker compose up -d --wait` |
 | Typecheck → lint → test. Must pass before a task is done | `docker compose run --rm server yarn check` |
-| E2E (Playwright + virtual authenticator; needs the stack running) | `docker compose --profile e2e run --rm e2e` |
+| E2E (Playwright + virtual authenticator) on a throwaway stack | `bash scripts/e2e.sh` |
 | Add a dependency | `docker compose run --rm server yarn workspace @app/<server\|web\|shared> add <pkg>@<exact-version>` |
 | Format | `docker compose run --rm server yarn format` |
-| Inspect the DB | `docker compose exec server sqlite3 /data/app.db` |
+| Inspect the DB | `docker compose exec server sqlite3 /data/app.db` (run `PRAGMA foreign_keys = ON;` first before deleting, or ON DELETE CASCADE does not fire) |
 | Reset everything (DB, node_modules). Also required when the server refuses an outdated DB schema | `docker compose down -v` |
+
+Never run the E2E service against the development stack (`docker compose --profile e2e run e2e`): it registers test users in the development DB, and a different `WEB_PORT` makes compose recreate the running containers. `scripts/e2e.sh` uses its own project name, volumes and port, and removes them afterwards.
 
 The host's Docker file sharing can lag about 10 seconds behind file changes (docs/01 K6). If a check reports a file you just deleted or misses one you just created, wait and rerun.
 

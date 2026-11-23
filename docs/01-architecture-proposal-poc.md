@@ -157,7 +157,7 @@ flowchart LR
 | 起動 | `docker compose up -d` |
 | ログ確認 | `docker compose logs -f server` |
 | 検査（typecheck → lint → test） | `docker compose run --rm server yarn check` |
-| E2E | `docker compose --profile e2e run --rm e2e` |
+| E2E | `bash scripts/e2e.sh`（専用のプロジェクト名・ボリューム・ポートで起動し、終わったら消す。開発用の DB を汚さない） |
 | DBを覗く | `docker compose exec server sqlite3 /data/app.db`（`sqlite3` CLI は Dockerfile で入れる） |
 | 完全初期化 | `docker compose down -v` |
 | クロスデバイス試験 | `docker compose --profile tunnel up -d` |

@@ -44,6 +44,8 @@ test('Conditional UI: after logout, the passkey from autofill logs in again', as
 
   // Logging out restarts the Conditional UI request on the username field.
   await page.locator('#logout').click();
+  // toBeVisible: the outcome must be visible to the user, not just present in the DOM.
+  await expect(page.locator('#login-result')).toBeVisible();
   await expect(page.locator('#login-result')).toContainText('ログインしました（オートフィル）');
   await expect(page.locator('#me')).toContainText('ログイン中: test-user-e2e-1');
 
@@ -65,6 +67,7 @@ test('login button: username-less login in a browser without Conditional UI', as
 
   // No name is typed: the authenticator supplies the passkey and its user handle.
   await page.locator('#login-button').click();
+  await expect(page.locator('#login-result')).toBeVisible();
   await expect(page.locator('#login-result')).toContainText('ログインしました');
   await expect(page.locator('#me')).toContainText('ログイン中: test-user-e2e-2');
 });
