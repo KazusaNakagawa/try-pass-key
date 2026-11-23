@@ -12,6 +12,7 @@ __metadata:
     "@app/shared": "workspace:*"
     "@types/express": "npm:5.0.6"
     "@types/node": "npm:26.6.6"
+    cbor-x: "npm:1.6.9"
     express: "npm:5.3.0"
     tsx: "npm:4.23.15"
     typescript: "npm:6.0.3"
@@ -35,6 +36,7 @@ __metadata:
   resolution: "@app/web@workspace:web"
   dependencies:
     "@app/shared": "workspace:*"
+    "@simplewebauthn/browser": "npm:14.0.0"
     "@types/node": "npm:26.6.6"
     typescript: "npm:6.0.3"
     vite: "npm:8.3.8"
@@ -61,6 +63,48 @@ __metadata:
     hashery: "npm:^1.5.1"
     keyv: "npm:^5.6.0"
   checksum: 10c0/99e901accd71eeb0bce91484d6c66d7ef2c731b541561eb5dc9ea7fed78bdc0b65e5dd2a80edde50191143bcfc5f238fc4742475b32e82d43b43eea224038e35
+  languageName: node
+  linkType: hard
+
+"@cbor-extract/cbor-extract-darwin-arm64@npm:2.2.3":
+  version: 2.2.3
+  resolution: "@cbor-extract/cbor-extract-darwin-arm64@npm:2.2.3"
+  conditions: os=darwin & cpu=arm64
+  languageName: node
+  linkType: hard
+
+"@cbor-extract/cbor-extract-darwin-x64@npm:2.2.3":
+  version: 2.2.3
+  resolution: "@cbor-extract/cbor-extract-darwin-x64@npm:2.2.3"
+  conditions: os=darwin & cpu=x64
+  languageName: node
+  linkType: hard
+
+"@cbor-extract/cbor-extract-linux-arm64@npm:2.2.3":
+  version: 2.2.3
+  resolution: "@cbor-extract/cbor-extract-linux-arm64@npm:2.2.3"
+  conditions: os=linux & cpu=arm64
+  languageName: node
+  linkType: hard
+
+"@cbor-extract/cbor-extract-linux-arm@npm:2.2.3":
+  version: 2.2.3
+  resolution: "@cbor-extract/cbor-extract-linux-arm@npm:2.2.3"
+  conditions: os=linux & cpu=arm
+  languageName: node
+  linkType: hard
+
+"@cbor-extract/cbor-extract-linux-x64@npm:2.2.3":
+  version: 2.2.3
+  resolution: "@cbor-extract/cbor-extract-linux-x64@npm:2.2.3"
+  conditions: os=linux & cpu=x64
+  languageName: node
+  linkType: hard
+
+"@cbor-extract/cbor-extract-win32-x64@npm:2.2.3":
+  version: 2.2.3
+  resolution: "@cbor-extract/cbor-extract-win32-x64@npm:2.2.3"
+  conditions: os=win32 & cpu=x64
   languageName: node
   linkType: hard
 
@@ -592,6 +636,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@simplewebauthn/browser@npm:14.0.0":
+  version: 14.0.0
+  resolution: "@simplewebauthn/browser@npm:14.0.0"
+  checksum: 10c0/5af1ac7761478dd33ac4cafdc4aede160d322c2097c57778e9fe568a52283aa81cff89b2515d2d91b75909ad68a69cc21e17f6dae5d74fbb0b2f4aa669d0c6f5
+  languageName: node
+  linkType: hard
+
 "@sonarsource/analyzer-commons-configurations@npm:^2.31.0-5284":
   version: 2.31.0-5284
   resolution: "@sonarsource/analyzer-commons-configurations@npm:2.31.0-5284"
@@ -1073,6 +1124,49 @@ __metadata:
   languageName: node
   linkType: hard
 
+"cbor-extract@npm:^2.2.3":
+  version: 2.2.3
+  resolution: "cbor-extract@npm:2.2.3"
+  dependencies:
+    "@cbor-extract/cbor-extract-darwin-arm64": "npm:2.2.3"
+    "@cbor-extract/cbor-extract-darwin-x64": "npm:2.2.3"
+    "@cbor-extract/cbor-extract-linux-arm": "npm:2.2.3"
+    "@cbor-extract/cbor-extract-linux-arm64": "npm:2.2.3"
+    "@cbor-extract/cbor-extract-linux-x64": "npm:2.2.3"
+    "@cbor-extract/cbor-extract-win32-x64": "npm:2.2.3"
+    node-gyp: "npm:latest"
+    node-gyp-build-optional-packages: "npm:5.1.1"
+  dependenciesMeta:
+    "@cbor-extract/cbor-extract-darwin-arm64":
+      optional: true
+    "@cbor-extract/cbor-extract-darwin-x64":
+      optional: true
+    "@cbor-extract/cbor-extract-linux-arm":
+      optional: true
+    "@cbor-extract/cbor-extract-linux-arm64":
+      optional: true
+    "@cbor-extract/cbor-extract-linux-x64":
+      optional: true
+    "@cbor-extract/cbor-extract-win32-x64":
+      optional: true
+  bin:
+    download-cbor-prebuilds: bin/download-prebuilds.js
+  checksum: 10c0/5c799c442a37ace16638937fd0fe07a691e011d31e3bb8e37b8e7b1714d246031cfbfa03d83bfa7c0db889aa983d4c7da7ef3d188e944c165a78af07eee0bfd5
+  languageName: node
+  linkType: hard
+
+"cbor-x@npm:1.6.9":
+  version: 1.6.9
+  resolution: "cbor-x@npm:1.6.9"
+  dependencies:
+    cbor-extract: "npm:^2.2.3"
+  dependenciesMeta:
+    cbor-extract:
+      optional: true
+  checksum: 10c0/6b123d60dacfb956ec7b8d91de15e59e963a09f8d9f3a1b7a64ecf48d19c1288e7ef3e0c3feaa6f6acfa996c0aaa009bc05826729af15538accdff8fb8c9e03b
+  languageName: node
+  linkType: hard
+
 "chai@npm:^6.3.0":
   version: 6.3.0
   resolution: "chai@npm:6.3.0"
@@ -1152,7 +1246,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"detect-libc@npm:^2.0.3":
+"detect-libc@npm:^2.0.1, detect-libc@npm:^2.0.3":
   version: 2.1.2
   resolution: "detect-libc@npm:2.1.2"
   checksum: 10c0/acc675c29a5649fa1fb6e255f993b8ee829e510b6b56b0910666949c80c364738833417d0edb5f90e4e46be17228b0f2b66a010513984e18b15deeeac49369c4
@@ -2166,6 +2260,19 @@ __metadata:
   dependencies:
     content-type: "npm:^2.1.0"
   checksum: 10c0/656fa57de02f1a0c4c09f9e17eb78e8182547c07093e810ff8f16249b6ae31f2c546a3d457905e94f3276b25f0e2741ea1a3bc3912192932ed7e493adfea535e
+  languageName: node
+  linkType: hard
+
+"node-gyp-build-optional-packages@npm:5.1.1":
+  version: 5.1.1
+  resolution: "node-gyp-build-optional-packages@npm:5.1.1"
+  dependencies:
+    detect-libc: "npm:^2.0.1"
+  bin:
+    node-gyp-build-optional-packages: bin.js
+    node-gyp-build-optional-packages-optional: optional.js
+    node-gyp-build-optional-packages-test: build-test.js
+  checksum: 10c0/f9fad2061c48fb0fc90831cd11d6a7670d731d22a5b00c7d3441b43b4003543299ff64ff2729afe2cefd7d14928e560d469336e5bb00f613932ec2cd56b3665b
   languageName: node
   linkType: hard
 

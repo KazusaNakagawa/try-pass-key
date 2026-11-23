@@ -9,7 +9,7 @@ const config = loadConfig();
 // eslint-disable-next-line security/detect-non-literal-fs-filename
 mkdirSync(dirname(config.dbPath), { recursive: true });
 const db = openDb(config.dbPath);
-const app = createApp({ db });
+const app = createApp({ db, config });
 
 const server = app.listen(config.port, () => {
   console.log(

@@ -2,6 +2,7 @@ import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { HealthResponse } from '@app/shared';
 import { createApp } from './app.js';
+import { loadConfig } from './config.js';
 import { openDb } from './db.js';
 
 describe('GET /api/health', () => {
@@ -9,7 +10,7 @@ describe('GET /api/health', () => {
   let close: () => void;
 
   beforeAll(async () => {
-    const app = createApp({ db: openDb(':memory:') });
+    const app = createApp({ db: openDb(':memory:'), config: loadConfig({ NODE_ENV: 'test' }) });
     await new Promise<void>((resolve) => {
       const server = app.listen(0, () => {
         baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;

@@ -1,0 +1,36 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+  line-height: 1.6;
+}
+main {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: end;
+}
+label {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 20rem;
+}
+input,
+button {
+  font: inherit;
+  padding: 0.4rem 0.6rem;
+}
+pre {
+  white-space: pre-wrap;
+  word-break: break-all;
+  padding: 0.75rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+pre:empty {
+  display: none;
+}

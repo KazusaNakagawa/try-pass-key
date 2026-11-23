@@ -311,9 +311,9 @@ export function runChecks(ctx: CeremonyContext, checks: readonly Check[]) { /* �
 |---|---|---|
 | C1 | `type` が `webauthn.create` / `webauthn.get` | 登録用の応答を認証に流用 |
 | C2 | `challenge` がサーバー発行の未使用・期限内の値と一致 | リプレイ攻撃（過去の署名の再送） |
-| C3 | `origin` が許可リスト（`http://localhost:5173`）と一致 | フィッシングサイト経由の応答を受理 |
+| C3 | `origin` が許可 origin（`RP_ORIGIN`）と完全一致し、`crossOrigin` が true でない | フィッシングサイト経由の応答、他サイトの iframe から呼ばせた応答を受理 |
 | C4 | challenge を取り出すと同時に削除する（検証の成否にかかわらず使い捨て） | 同じ challenge での二重ログイン |
-| C5 | challenge が要求元のブラウザに発行されたもの（一時 Cookie `ceremony` の行IDで引いた行と一致。ステップアップでは行の `user_id` がセッションのユーザーと一致） | 漏れた署名済み応答（XSS での窃取、ログへの混入など）を、攻撃者が別のブラウザから送って受理される |
+| C5 | challenge が要求元のブラウザに発行されたもの（challenge の値で引いた行の ID が一時 Cookie `ceremony` の値と一致。ステップアップでは行の `user_id` がセッションのユーザーと一致） | 漏れた署名済み応答（XSS での窃取、ログへの混入など）を、攻撃者が別のブラウザから送って受理される |
 
 ### 6.2 authenticatorData
 
@@ -362,6 +362,8 @@ export function runChecks(ctx: CeremonyContext, checks: readonly Check[]) { /* �
 | GET | `/api/debug/last-ceremony` | 開発時のみ | 直近の登録・認証のデコード結果を返す（学習用の可視化） |
 
 エラー応答は `{ "error": "<code>", "detail": "<人間向け説明>" }` に統一する。主なコードは `invalid_challenge`、`invalid_origin`、`user_verification_required`、`unknown_credential`、`signature_invalid`、`step_up_required`。
+
+6章の検証で拒否した場合は、どの項目で落ちたかを `check`（`C3` など）で返す（学習用の可視化）。検証項目とコードの対応は `server/src/http/errors.ts` の `CHECK_ERROR_CODES` にある。デコードできない応答は `malformed_response`、リクエスト本文の形式違反は `invalid_request`、`Origin` ヘッダーの不一致は `invalid_request_origin`（403）。
 
 ## 8. データモデル
 
@@ -419,17 +421,17 @@ erDiagram
 
 challenge は登録・認証前のためユーザーと紐づかないことが多く、セッションではなくDBに置いて使い捨てを保証する。期限切れの行は起動時と定期的に削除する。
 
-**challenge の照合（C5）**: options で作った行の ID を一時 Cookie で返し、verify ではその ID で行を引く。clientDataJSON に入っている challenge の値で行を検索することはしない。
+**challenge の照合（C2, C5）**: 行は clientDataJSON の challenge の値で引き（C2）、その行の ID が一時 Cookie の値と一致するかを別の検査として確かめる（C5）。Cookie の値で直接引くと照合が行の取り出し方に埋め込まれ、C5 だけを外して攻撃を再現できないため（D21。D14 の縛りの強さは変わらない）。
 
 - Cookie: `ceremony=<行ID>; HttpOnly; SameSite=Strict; Path=/api; Max-Age=300`（HTTPS 時は `Secure`）
-- verify: `DELETE FROM challenges WHERE id = <Cookie> AND purpose = ? RETURNING *` で取り出し、行の `challenge` と clientDataJSON の challenge を比較する（C2）
+- verify: `SELECT * FROM challenges WHERE challenge = ?` で行を引き（`challenge` 列は UNIQUE）、C2 で用途と期限、C4 で `DELETE FROM challenges WHERE id = ? RETURNING id` による消費、C5 で Cookie との一致を確かめる
 - ステップアップはログイン中なので一時 Cookie を使わず、行の `user_id` とセッションのユーザーの一致で縛る
-- 判断の経緯は decisions の D14
+- 判断の経緯は decisions の D14、D21
 
 登録の options から verify までの一時状態（`user_handle`、`display_name`）も challenge の行に持たせる。`users` の行は verify が成功したときに初めて作るので、途中で離脱しても未完成のユーザーが残らない。
 
 - **プロセスのメモリに置かない理由**: `tsx watch` は保存のたびにプロセスを再起動するため、メモリに置くと ceremony の途中で状態が消える。DB なら `sqlite3` で中身も覗ける。
-- **取得と削除は1文で行う**: `DELETE FROM challenges WHERE id = ? AND purpose = ? RETURNING *` で取り出すと同時に消し、同じ challenge の二重使用を防ぐ（C4）。
+- **削除は1文で行い、成否を見る**: `DELETE FROM challenges WHERE id = ? RETURNING id` が行を返さなければ、別のリクエストが先に使ったとみなして拒否する（C4）。C2 の直後に実行し、後続の検査が失敗しても challenge は使い捨てになる。
 - **実運用との対応**: 本番でサーバーを複数台にするなら Redis 等の共有ストアに TTL 付きで置き、`GETDEL` で取り出すのが一般的。SQLite の構成はその縮小版として扱う。
 
 ### セッション方針

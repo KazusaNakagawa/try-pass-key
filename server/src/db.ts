@@ -31,11 +31,11 @@ CREATE TABLE IF NOT EXISTS credentials (
 );
 CREATE INDEX IF NOT EXISTS credentials_user_id ON credentials(user_id);
 
--- One row per ceremony. Its id is returned in the "ceremony" cookie (C5) and the
--- row is consumed with DELETE ... RETURNING (C4).
+-- One row per ceremony. Looked up by the challenge value in clientDataJSON (C2),
+-- its id must equal the "ceremony" cookie (C5), and it is deleted on first use (C4).
 CREATE TABLE IF NOT EXISTS challenges (
   id           TEXT NOT NULL PRIMARY KEY,
-  challenge    BLOB NOT NULL,
+  challenge    BLOB NOT NULL UNIQUE,
   purpose      TEXT NOT NULL CHECK (purpose IN ('register', 'login', 'stepup')),
   user_handle  BLOB,                           -- register only
   display_name TEXT,                           -- register only
