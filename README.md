@@ -22,7 +22,7 @@ TypeScript / Express / Vite / SQLite を Docker Compose で動かします。ホ
 
 ```bash
 docker compose up -d                    # 起動 → http://localhost:5173
-docker compose run --rm server yarn test  # テスト
+docker compose run --rm server yarn check # 型検査・lint・テスト
 docker compose down -v                  # DB・依存ごと完全に初期化
 ```
 
