@@ -11,11 +11,18 @@ describe('C4 challenge consumed on first use', () => {
     expect(h.db.prepare('SELECT count(*) AS n FROM challenges').get()).toEqual({ n: 0 });
   });
 
-  it('rejects when the challenge was already consumed', () => {
+  it('rejects the second of two requests that both found the row', () => {
     const ctx = new RegistrationHarness().validContext();
     C4.run(ctx);
     expectRejectedBy(() => {
       C4.run(ctx);
     }, 'C4');
+  });
+
+  it('leaves a never-issued challenge to C2', () => {
+    const ctx = new RegistrationHarness().validContext();
+    expect(() => {
+      C4.run({ ...ctx, challengeRow: undefined });
+    }).not.toThrow();
   });
 });

@@ -1,14 +1,20 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import type { RegisterOptionsResponse, RegistrationResponse } from '@app/shared';
+import type { RegisterOptionsResponse, RegistrationResponse, Transport } from '@app/shared';
 import type { Config } from '../config.js';
 import { bytesEqual, fromBase64Url, toBase64Url } from './bytes.js';
 import { consumeChallenge, findChallenge, issueChallenge } from './challenges.js';
 import type { RegistrationContext } from './checks/types.js';
 import { CHALLENGE_TTL_MS, RP_NAME, SUPPORTED_ALGORITHMS } from './constants.js';
-import { parseCosePublicKey } from './cose.js';
+import { parseCosePublicKey, type CosePublicKey } from './cose.js';
 import { ParseError } from './errors.js';
-import { parseAttestationObject, parseAuthenticatorData, parseClientDataJSON } from './parse.js';
+import {
+  parseAttestationObject,
+  parseAuthenticatorData,
+  parseClientDataJSON,
+  type AttestedCredentialData,
+  type AuthenticatorData,
+} from './parse.js';
 
 export interface RegistrationDeps {
   db: DatabaseSync;
@@ -48,44 +54,65 @@ export function createRegistrationOptions(
   };
 }
 
-/**
- * Step 2a: decode the response and gather everything the checks need.
- * Decoding failures throw ParseError; nothing here decides whether the response
- * is acceptable. That is the checks' job (pipeline.ts).
- */
-export function buildRegistrationContext(
-  deps: RegistrationDeps,
-  input: { response: RegistrationResponse; ceremonyId: string | undefined },
-): RegistrationContext {
-  const { response } = input;
-  const clientData = parseClientDataJSON(response.response.clientDataJSON);
-  const attestation = parseAttestationObject(response.response.attestationObject);
+interface DecodedRegistration {
+  authData: AuthenticatorData;
+  attested: AttestedCredentialData;
+  publicKey: CosePublicKey;
+}
 
+/**
+ * Decodes attestationObject and the credential public key. Throws ParseError when
+ * the response is not structurally a registration response (D23): attestation
+ * other than "none", no attested credential data, or a reported credential ID
+ * that differs from the one inside authenticatorData.
+ */
+function decodeRegistration(response: RegistrationResponse): DecodedRegistration {
+  const attestation = parseAttestationObject(response.response.attestationObject);
   // attestation: "none" was requested, and browsers replace any statement with "none".
   if (attestation.fmt !== 'none' || attestation.attStmt.size !== 0) {
     throw new ParseError(`unsupported attestation format: ${attestation.fmt}`);
   }
-
   const authData = parseAuthenticatorData(attestation.authData);
   const attested = authData.attestedCredentialData;
   if (!authData.flags.at || !attested) {
     throw new ParseError('registration response has no attested credential data');
   }
-
-  // The ID the browser reports must be the one the authenticator signed into authData.
   const rawId = fromBase64Url(response.rawId, 'rawId');
   if (response.id !== response.rawId || !bytesEqual(rawId, attested.credentialId)) {
     throw new ParseError('credential ID does not match authenticatorData');
   }
+  return { authData, attested, publicKey: parseCosePublicKey(attested.credentialPublicKey) };
+}
 
-  const publicKey = parseCosePublicKey(attested.credentialPublicKey);
+/**
+ * Step 2a: gather everything the checks need. Nothing here decides whether the
+ * response is acceptable; that is the checks' job (pipeline.ts).
+ *
+ * Only clientDataJSON is decoded up front, because it carries the challenge.
+ * The attestation object is decoded lazily, on the first access to authData /
+ * attestedCredentialData / publicKey. C4 runs first and never touches those, so
+ * the challenge is consumed before a malformed attestation can throw.
+ */
+export function buildRegistrationContext(
+  deps: RegistrationDeps,
+  input: { response: RegistrationResponse; ceremonyId: string | undefined },
+): RegistrationContext {
+  const clientData = parseClientDataJSON(input.response.response.clientDataJSON);
   const challengeRow = findChallenge(deps.db, clientData.challenge);
+  let decoded: DecodedRegistration | undefined;
+  const decode = () => (decoded ??= decodeRegistration(input.response));
 
   return {
     clientData,
-    authData,
-    attestedCredentialData: attested,
-    publicKey,
+    get authData() {
+      return decode().authData;
+    },
+    get attestedCredentialData() {
+      return decode().attested;
+    },
+    get publicKey() {
+      return decode().publicKey;
+    },
     expected: {
       type: 'webauthn.create',
       purpose: 'register',
@@ -106,7 +133,7 @@ export function buildRegistrationContext(
 export function saveRegistration(
   deps: RegistrationDeps,
   ctx: RegistrationContext,
-  transports: readonly string[],
+  transports: readonly Transport[],
 ) {
   const row = ctx.challengeRow;
   if (!row?.userHandle || row.displayName === null) {

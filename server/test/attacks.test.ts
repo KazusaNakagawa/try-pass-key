@@ -126,6 +126,32 @@ const scenarios: Scenario[] = [
     },
   },
   {
+    check: 'R4',
+    attack: 'an oversized (1024-byte) credential ID is stored and echoed back',
+    rejectedBy: 'R4',
+    run: (checks) => {
+      runChecks(
+        new RegistrationHarness().validContext(
+          {},
+          new SoftAuthenticator({ credentialIdLength: 1024 }),
+        ),
+        checks,
+      );
+    },
+  },
+  {
+    check: 'R5',
+    attack: 'a factorable RSA key (1024-bit, e = 3) is registered',
+    rejectedBy: 'R5',
+    run: (checks) => {
+      const weak = new SoftAuthenticator({
+        alg: -257,
+        rsa: { modulusLength: 1024, publicExponent: 3 },
+      });
+      runChecks(new RegistrationHarness().validContext({}, weak), checks);
+    },
+  },
+  {
     check: 'R3',
     attack: 'inconsistent backup flags (BE=0, BS=1) are stored',
     rejectedBy: 'R3',

@@ -9,6 +9,8 @@ import { C5 } from './checks/C5.js';
 import { R1 } from './checks/R1.js';
 import { R2 } from './checks/R2.js';
 import { R3 } from './checks/R3.js';
+import { R4 } from './checks/R4.js';
+import { R5 } from './checks/R5.js';
 import type { Check, RegistrationContext } from './checks/types.js';
 
 /**
@@ -16,11 +18,13 @@ import type { Check, RegistrationContext } from './checks/types.js';
  * nothing else: there is no flag or environment variable that turns a check off.
  * Tests remove one check from a copy of this list to show which attack it stops.
  *
- * C2 and C4 come first so the challenge is consumed even if a later check fails.
+ * C4 comes first: the challenge is consumed before any other check runs and
+ * before the attestation object is decoded (the context decodes it lazily), so
+ * a rejected or malformed response still burns its challenge.
  */
 export const REGISTRATION_CHECKS: readonly Check<RegistrationContext>[] = Object.freeze([
-  C2,
   C4,
+  C2,
   C5,
   C1,
   C3,
@@ -30,6 +34,8 @@ export const REGISTRATION_CHECKS: readonly Check<RegistrationContext>[] = Object
   R1,
   R2,
   R3,
+  R4,
+  R5,
 ]);
 
 export function runChecks<Ctx>(ctx: Ctx, checks: readonly Check<Ctx>[]): void {

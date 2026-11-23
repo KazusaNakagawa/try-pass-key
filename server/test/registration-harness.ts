@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { RegistrationResponse } from '@app/shared';
+import { RegistrationResponse, type RegistrationResponseJSON } from '@app/shared';
 import { loadConfig, type Config } from '../src/config.js';
 import { openDb } from '../src/db.js';
 import type { RegistrationContext } from '../src/webauthn/checks/types.js';
@@ -34,7 +34,7 @@ export class RegistrationHarness {
     begun: ReturnType<RegistrationHarness['begin']>,
     overrides: AttestationOverrides = {},
     authenticator = new SoftAuthenticator(),
-  ): RegistrationResponse {
+  ): RegistrationResponseJSON {
     return authenticator.createCredential(
       {
         challenge: begun.options.challenge,
@@ -45,8 +45,12 @@ export class RegistrationHarness {
     );
   }
 
-  context(response: RegistrationResponse, ceremonyId: string | undefined): RegistrationContext {
-    return buildRegistrationContext(this.deps, { response, ceremonyId });
+  /** Parses the response like the route does, then builds the context. */
+  context(response: RegistrationResponseJSON, ceremonyId: string | undefined): RegistrationContext {
+    return buildRegistrationContext(this.deps, {
+      response: RegistrationResponse.parse(response),
+      ceremonyId,
+    });
   }
 
   /** A valid context for a fresh ceremony, optionally with tampered fields. */

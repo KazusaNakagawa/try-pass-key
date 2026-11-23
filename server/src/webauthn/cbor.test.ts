@@ -29,6 +29,11 @@ describe('cborItemLength', () => {
     expect(() => cborItemLength(Buffer.from([0x9f, 0x01, 0xff]), 0)).toThrow(ParseError);
   });
 
+  it('rejects deep nesting instead of overflowing the stack', () => {
+    const deep = Buffer.concat([Buffer.alloc(50_000, 0x81), Buffer.from([0x01])]);
+    expect(() => cborItemLength(deep, 0)).toThrow(/nested too deeply/);
+  });
+
   it('rejects truncated data', () => {
     expect(() => cborItemLength(Buffer.from([0x58, 0x05, 0x01]), 0)).toThrow(ParseError);
   });

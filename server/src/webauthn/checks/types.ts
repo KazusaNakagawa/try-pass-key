@@ -15,6 +15,8 @@ export type CheckId =
   | 'R1'
   | 'R2'
   | 'R3'
+  | 'R4'
+  | 'R5'
   | 'L1'
   | 'L2'
   | 'L3';

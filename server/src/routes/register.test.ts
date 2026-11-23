@@ -143,4 +143,51 @@ describe('POST /api/register/verify', () => {
     expect(res.status).toBe(400);
     expect(ApiError.parse(await res.json()).error).toBe('malformed_response');
   });
+
+  it('consumes the challenge even when the attestation cannot be decoded (C4 first)', async () => {
+    const { options, cookie } = await begin();
+    const response = respond(options);
+    response.response.attestationObject = 'AAAA';
+    await post('/api/register/verify', response, { cookie });
+    const challenge = Buffer.from(options.challenge, 'base64url');
+    expect(
+      db.prepare('SELECT count(*) AS n FROM challenges WHERE challenge = ?').get(challenge),
+    ).toEqual({ n: 0 });
+  });
+
+  it('treats a malformed ceremony cookie as missing instead of failing with 500', async () => {
+    const { options } = await begin();
+    const res = await post('/api/register/verify', respond(options), {
+      cookie: 'ceremony=%E0%A4%A',
+    });
+    expect(res.status).toBe(400);
+    expect(ApiError.parse(await res.json())).toMatchObject({ check: 'C5' });
+  });
+
+  it('stores only known transports', async () => {
+    const { options, cookie } = await begin();
+    const response = respond(options);
+    response.response.transports = ['internal', 'x'.repeat(20), 'hybrid'];
+    const res = await post('/api/register/verify', response, { cookie });
+    const body = RegisterVerifyResponse.parse(await res.json());
+    expect(body.credential.transports).toEqual(['internal', 'hybrid']);
+  });
+});
+
+describe('request body errors', () => {
+  it('answers 413, not 500, for a body over the size limit', async () => {
+    const res = await post('/api/register/options', { displayName: 'x'.repeat(200_000) });
+    expect(res.status).toBe(413);
+    expect(ApiError.parse(await res.json()).error).toBe('payload_too_large');
+  });
+
+  it('answers 400 for malformed JSON', async () => {
+    const res = await fetch(`${baseUrl}/api/register/options`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: TEST_CONFIG.rpOrigin },
+      body: '{',
+    });
+    expect(res.status).toBe(400);
+    expect(ApiError.parse(await res.json()).error).toBe('invalid_request');
+  });
 });

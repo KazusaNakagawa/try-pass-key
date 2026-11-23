@@ -312,7 +312,7 @@ export function runChecks(ctx: CeremonyContext, checks: readonly Check[]) { /* �
 | C1 | `type` が `webauthn.create` / `webauthn.get` | 登録用の応答を認証に流用 |
 | C2 | `challenge` がサーバー発行の未使用・期限内の値と一致 | リプレイ攻撃（過去の署名の再送） |
 | C3 | `origin` が許可 origin（`RP_ORIGIN`）と完全一致し、`crossOrigin` が true でない | フィッシングサイト経由の応答、他サイトの iframe から呼ばせた応答を受理 |
-| C4 | challenge を取り出すと同時に削除する（検証の成否にかかわらず使い捨て） | 同じ challenge での二重ログイン |
+| C4 | challenge を、他のどの検査よりも、また attestationObject のデコードよりも先に削除する（検証の成否にかかわらず使い捨て）。同時に2つのリクエストが行を見つけた場合は、削除できた方だけが続行する | 同じ challenge での二重登録・二重ログイン、壊れた応答を送って challenge を使い回すこと |
 | C5 | challenge が要求元のブラウザに発行されたもの（challenge の値で引いた行の ID が一時 Cookie `ceremony` の値と一致。ステップアップでは行の `user_id` がセッションのユーザーと一致） | 漏れた署名済み応答（XSS での窃取、ログへの混入など）を、攻撃者が別のブラウザから送って受理される |
 
 ### 6.2 authenticatorData
@@ -330,7 +330,9 @@ export function runChecks(ctx: CeremonyContext, checks: readonly Check[]) { /* �
 |---|---|---|
 | R1 | 公開鍵のアルゴリズムが要求した `pubKeyCredParams` に含まれる | 弱いアルゴリズムの混入防止 |
 | R2 | `credentialId` が未登録 | 他人の credential の乗っ取り防止 |
-| R3 | BE / BS を保存する | 同期型か端末固定型かを後で判断材料にする |
+| R3 | BE / BS の組み合わせが正しい（BS=1 なら BE=1）。正しいものを保存する | 同期型か端末固定型かを後で判断材料にする。矛盾したフラグを信用しない |
+| R4 | `credentialId` が 1023 バイト以下（WebAuthn L3 §7.1） | 巨大な ID が主キーとして保存され、allowCredentials 等で送り返され続ける |
+| R5 | RSA 鍵は 2048 ビット以上かつ e = 65537（ES256、Ed25519 は鍵長固定なので対象外） | 素因数分解できる弱い鍵が登録され、署名を偽造される |
 
 ### 6.4 認証時のみ
 
@@ -431,7 +433,7 @@ challenge は登録・認証前のためユーザーと紐づかないことが�
 登録の options から verify までの一時状態（`user_handle`、`display_name`）も challenge の行に持たせる。`users` の行は verify が成功したときに初めて作るので、途中で離脱しても未完成のユーザーが残らない。
 
 - **プロセスのメモリに置かない理由**: `tsx watch` は保存のたびにプロセスを再起動するため、メモリに置くと ceremony の途中で状態が消える。DB なら `sqlite3` で中身も覗ける。
-- **削除は1文で行い、成否を見る**: `DELETE FROM challenges WHERE id = ? RETURNING id` が行を返さなければ、別のリクエストが先に使ったとみなして拒否する（C4）。C2 の直後に実行し、後続の検査が失敗しても challenge は使い捨てになる。
+- **削除は1文で行い、成否を見る**: `DELETE FROM challenges WHERE id = ? RETURNING id` が行を返さなければ、別のリクエストが先に使ったとみなして拒否する（C4）。C4 はパイプラインの先頭で実行し、attestationObject のデコードはその後まで遅らせる（D24）。後続の検査が失敗しても、応答が壊れていても、challenge は使い捨てになる。
 - **実運用との対応**: 本番でサーバーを複数台にするなら Redis 等の共有ストアに TTL 付きで置き、`GETDEL` で取り出すのが一般的。SQLite の構成はその縮小版として扱う。
 
 ### セッション方針
@@ -544,7 +546,7 @@ try-pass-key/
 - [ ] ホストに Docker 以外をインストールせずに、起動・テスト・初期化ができる
 - [ ] `docker compose down -v` の後に `up` すると、ユーザー0件のまっさらな状態に戻る
 - [ ] Chrome と Safari の両方で、登録とユーザー名なしログインが成功する
-- [ ] 6章の C1〜C5、A1〜A4、R1〜R3、L1〜L3 のそれぞれにテストがあり、すべて通る
+- [ ] 6章の C1〜C5、A1〜A4、R1〜R5、L1〜L3 のそれぞれにテストがあり、すべて通る
 - [ ] origin を改ざんした assertion、使用済み challenge の再送、別ブラウザに発行された challenge での応答、UV=0 の assertion が拒否されることをテストで示せる
 - [ ] ログイン済みでもステップアップなしの送金が `step_up_required` で拒否される
 - [ ] ステップアップ後に金額を変えた送金が拒否される

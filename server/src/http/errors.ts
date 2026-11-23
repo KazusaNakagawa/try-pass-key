@@ -18,6 +18,8 @@ const CHECK_ERROR_CODES: Record<CheckId, string> = {
   R1: 'unsupported_algorithm',
   R2: 'credential_already_registered',
   R3: 'invalid_backup_flags',
+  R4: 'credential_id_too_long',
+  R5: 'weak_public_key',
   L1: 'unknown_credential',
   L2: 'user_handle_mismatch',
   L3: 'signature_invalid',
@@ -33,6 +35,13 @@ export class HttpError extends Error {
   }
 }
 
+/** Errors from body-parser (http-errors) carry a 4xx `status`. */
+function isClientError(err: unknown): err is { status: number; message: string } {
+  if (!(err instanceof Error) || !('status' in err)) return false;
+  const status = err.status;
+  return typeof status === 'number' && status >= 400 && status < 500;
+}
+
 export const errorHandler: ErrorRequestHandler = (err: unknown, _req, res, _next) => {
   const send = (status: number, body: ApiError) => res.status(status).json(body);
 
@@ -45,9 +54,12 @@ export const errorHandler: ErrorRequestHandler = (err: unknown, _req, res, _next
     send(400, { error: 'invalid_request', detail: err.issues.map((i) => i.message).join('; ') });
   } else if (err instanceof HttpError) {
     send(err.status, { error: err.code, detail: err.message });
-  } else if (err instanceof SyntaxError) {
-    // express.json() on a malformed body
-    send(400, { error: 'invalid_request', detail: 'request body is not valid JSON' });
+  } else if (isClientError(err)) {
+    // express.json() errors: malformed JSON (400), body too large (413), bad charset (415)
+    send(err.status, {
+      error: err.status === 413 ? 'payload_too_large' : 'invalid_request',
+      detail: err.message,
+    });
   } else {
     console.error('[server] unexpected error', err);
     send(500, { error: 'internal_error', detail: 'unexpected server error' });

@@ -23,7 +23,12 @@ export function readCookie(req: Request, name: string): string | undefined {
     const eq = part.indexOf('=');
     if (eq === -1) continue;
     if (part.slice(0, eq).trim() === name) {
-      return decodeURIComponent(part.slice(eq + 1).trim());
+      try {
+        return decodeURIComponent(part.slice(eq + 1).trim());
+      } catch {
+        // Malformed percent-encoding: treat as no cookie (C5 then rejects).
+        return undefined;
+      }
     }
   }
   return undefined;

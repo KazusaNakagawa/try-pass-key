@@ -49,3 +49,12 @@ export function findChallenge(db: DatabaseSync, challenge: Buffer): ChallengeRow
 export function consumeChallenge(db: DatabaseSync, id: string): boolean {
   return db.prepare('DELETE FROM challenges WHERE id = ? RETURNING id').get(id) !== undefined;
 }
+
+/**
+ * Deletes expired challenges (abandoned ceremonies). Run at startup and
+ * periodically (index.ts). Returns the number of rows deleted.
+ */
+export function deleteExpiredChallenges(db: DatabaseSync, now: Date): number {
+  const result = db.prepare('DELETE FROM challenges WHERE expires_at <= ?').run(now.toISOString());
+  return Number(result.changes);
+}

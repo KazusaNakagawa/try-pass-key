@@ -4,7 +4,7 @@
  * so tests can produce the malicious inputs that §6 checks must reject.
  */
 import { createHash, generateKeyPairSync, randomBytes, type KeyObject } from 'node:crypto';
-import type { RegistrationResponse } from '@app/shared';
+import type { RegistrationResponseJSON } from '@app/shared';
 import { standardCbor } from './cbor-encoder.js';
 
 const cbor = standardCbor;
@@ -32,16 +32,25 @@ export interface AttestationOverrides {
 }
 
 export class SoftAuthenticator {
-  readonly credentialId: Buffer = randomBytes(16);
+  readonly credentialId: Buffer;
   readonly alg: SoftAlg;
   readonly privateKey: KeyObject;
   private readonly coseKey: Map<number, unknown>;
   private readonly defaultFlags: Flags;
 
-  constructor(opts: { alg?: SoftAlg; flags?: Partial<Flags> } = {}) {
+  constructor(
+    opts: {
+      alg?: SoftAlg;
+      flags?: Partial<Flags>;
+      credentialIdLength?: number;
+      /** RSA only: lets tests create weak keys. */
+      rsa?: { modulusLength: number; publicExponent: number };
+    } = {},
+  ) {
     this.alg = opts.alg ?? -7;
+    this.credentialId = randomBytes(opts.credentialIdLength ?? 16);
     this.defaultFlags = { up: true, uv: true, be: true, bs: true, ...opts.flags };
-    const { privateKey, coseKey } = generateKey(this.alg);
+    const { privateKey, coseKey } = generateKey(this.alg, opts.rsa);
     this.privateKey = privateKey;
     this.coseKey = coseKey;
   }
@@ -50,7 +59,7 @@ export class SoftAuthenticator {
   createCredential(
     input: { challenge: string; origin: string; rpId: string },
     o: AttestationOverrides = {},
-  ): RegistrationResponse {
+  ): RegistrationResponseJSON {
     const clientDataJSON = Buffer.from(
       JSON.stringify({
         type: o.type ?? 'webauthn.create',
@@ -106,7 +115,13 @@ function flagsByte(f: Flags, extra: { at: boolean }): number {
   );
 }
 
-function generateKey(alg: SoftAlg): { privateKey: KeyObject; coseKey: Map<number, unknown> } {
+function generateKey(
+  alg: SoftAlg,
+  rsa: { modulusLength: number; publicExponent: number } = {
+    modulusLength: 2048,
+    publicExponent: 65537,
+  },
+): { privateKey: KeyObject; coseKey: Map<number, unknown> } {
   const b = (s: string | undefined) => Buffer.from(s ?? '', 'base64url');
   if (alg === -7) {
     const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
@@ -123,7 +138,7 @@ function generateKey(alg: SoftAlg): { privateKey: KeyObject; coseKey: Map<number
     };
   }
   if (alg === -257) {
-    const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', rsa);
     const jwk = publicKey.export({ format: 'jwk' });
     return {
       privateKey,

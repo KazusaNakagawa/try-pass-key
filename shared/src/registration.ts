@@ -3,7 +3,11 @@ import { z } from 'zod';
 /** base64url without padding, as used by WebAuthn JSON serialization. */
 export const Base64Url = z.string().regex(/^[A-Za-z0-9_-]*$/, 'must be base64url');
 
-const Transport = z.enum(['ble', 'cable', 'hybrid', 'internal', 'nfc', 'smart-card', 'usb']);
+export const Transport = z.enum(['ble', 'cable', 'hybrid', 'internal', 'nfc', 'smart-card', 'usb']);
+export type Transport = z.infer<typeof Transport>;
+
+const isTransport = (value: string): value is Transport =>
+  (Transport.options as readonly string[]).includes(value);
 
 /** POST /api/register/options request */
 export const RegisterOptionsRequest = z.object({
@@ -43,12 +47,21 @@ export const RegistrationResponse = z.object({
   response: z.object({
     clientDataJSON: Base64Url,
     attestationObject: Base64Url,
-    transports: z.array(z.string()).optional(),
+    // Unknown values are ignored, as the spec requires; sizes are bounded because the
+    // list is stored and later sent back in allowCredentials / excludeCredentials.
+    transports: z
+      .array(z.string().max(32))
+      .max(16)
+      .optional()
+      .transform((values) => values?.filter(isTransport)),
   }),
   clientExtensionResults: z.record(z.string(), z.unknown()),
   authenticatorAttachment: z.enum(['platform', 'cross-platform']).optional(),
 });
+/** After parsing (unknown transports removed). */
 export type RegistrationResponse = z.infer<typeof RegistrationResponse>;
+/** As sent by the browser, before parsing. */
+export type RegistrationResponseJSON = z.input<typeof RegistrationResponse>;
 
 /** POST /api/register/verify response */
 export const RegisterVerifyResponse = z.object({
@@ -66,7 +79,7 @@ export const RegisterVerifyResponse = z.object({
     signCount: z.number(),
     backupEligible: z.boolean(),
     backupState: z.boolean(),
-    transports: z.array(z.string()),
+    transports: z.array(Transport),
   }),
 });
 export type RegisterVerifyResponse = z.infer<typeof RegisterVerifyResponse>;

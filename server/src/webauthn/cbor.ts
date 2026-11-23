@@ -22,10 +22,14 @@ export function decodeCbor(bytes: Uint8Array): unknown {
  * canonical CBOR.
  */
 export function cborItemLength(bytes: Uint8Array, start: number): number {
-  return skipItem(bytes, start) - start;
+  return skipItem(bytes, start, 0) - start;
 }
 
-function skipItem(bytes: Uint8Array, pos: number): number {
+/** COSE keys nest at most a couple of levels; deep nesting is an attack on the stack. */
+const MAX_DEPTH = 16;
+
+function skipItem(bytes: Uint8Array, pos: number, depth: number): number {
+  if (depth > MAX_DEPTH) throw new ParseError('CBOR: nested too deeply');
   const initial = bytes.at(pos);
   if (initial === undefined) throw new ParseError('CBOR: unexpected end of data');
   const major = initial >> 5;
@@ -47,17 +51,17 @@ function skipItem(bytes: Uint8Array, pos: number): number {
     case 4: {
       // array
       let p = next;
-      for (let i = 0; i < value; i++) p = skipItem(bytes, p);
+      for (let i = 0; i < value; i++) p = skipItem(bytes, p, depth + 1);
       return p;
     }
     case 5: {
       // map
       let p = next;
-      for (let i = 0; i < value * 2; i++) p = skipItem(bytes, p);
+      for (let i = 0; i < value * 2; i++) p = skipItem(bytes, p, depth + 1);
       return p;
     }
     default: // 6: tag, followed by one item
-      return skipItem(bytes, next);
+      return skipItem(bytes, next, depth + 1);
   }
 }
 

@@ -8,7 +8,21 @@ import { REGISTRATION_CHECKS } from '../src/webauthn/pipeline.js';
  */
 const byId = (a: string, b: string) => a.localeCompare(b);
 
-const REGISTRATION_ITEMS = ['C1', 'C2', 'C3', 'C4', 'C5', 'A1', 'A2', 'A3', 'R1', 'R2', 'R3'];
+const REGISTRATION_ITEMS = [
+  'C1',
+  'C2',
+  'C3',
+  'C4',
+  'C5',
+  'A1',
+  'A2',
+  'A3',
+  'R1',
+  'R2',
+  'R3',
+  'R4',
+  'R5',
+];
 
 describe('verification pipeline', () => {
   it('runs exactly the registration items from docs/01 §6', () => {
@@ -21,8 +35,7 @@ describe('verification pipeline', () => {
     expect(Object.isFrozen(REGISTRATION_CHECKS)).toBe(true);
   });
 
-  it('consumes the challenge before any check that can fail on attacker input', () => {
-    const ids = REGISTRATION_CHECKS.map((c) => c.id);
-    expect(ids.slice(0, 2)).toEqual(['C2', 'C4']);
+  it('consumes the challenge (C4) before any other check', () => {
+    expect(REGISTRATION_CHECKS[0]?.id).toBe('C4');
   });
 });

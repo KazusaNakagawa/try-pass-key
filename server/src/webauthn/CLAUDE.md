@@ -8,7 +8,9 @@ Hand-written WebAuthn verification (docs/01 §6.0, D11). Read docs/01 §6 before
 - Routes call `runChecks(ctx, REGISTRATION_CHECKS)` (later also `AUTHENTICATION_CHECKS`) with the frozen constant from `pipeline.ts`. Never add a flag, option, environment variable or parameter that skips or reorders checks in production code.
 - Never remove a check from a pipeline, or weaken one, to make a test pass. `test/pipeline.test.ts` fails if the list stops matching §6; that is intentional.
 - Never delete or skip a scenario in `test/attacks.test.ts`. Each one proves that the full pipeline rejects an attack and that removing that one check lets it through.
-- Parsing (`parse.ts`, `cose.ts`, `cbor.ts`) only decodes and throws `ParseError`. Deciding whether a response is acceptable belongs in a check.
+- C4 (consume the challenge) runs first. Everything after it may throw, including lazy decoding of the attestation object, and the challenge must already be gone by then. Do not decode anything except clientDataJSON before the pipeline runs.
+- Parsing (`parse.ts`, `cose.ts`, `cbor.ts`) only decodes and throws `ParseError`. Deciding whether a well-formed response is acceptable belongs in a check. The exception is a response that is not structurally a registration response (D23: attestation other than `none`, no attested data, `rawId` differing from authData); those are `ParseError`s because removing them would not enable any attack.
+- Every recursive or size-dependent parser step needs a bound (CBOR depth, lengths); a crafted input must end as `ParseError`, never as a crash or 500.
 - `@simplewebauthn/server` may be used only in tests, as a reference implementation (differential tests, M5).
 
 ## Adding a check
