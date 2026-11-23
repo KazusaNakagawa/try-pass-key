@@ -45,4 +45,62 @@ describe('openDb', () => {
       );
     }).toThrow(/CHECK/);
   });
+
+  it.each(['users', 'credentials', 'challenges', 'sessions', 'transfers'])(
+    'declares the primary key of %s NOT NULL',
+    (table) => {
+      const db = openDb(':memory:');
+      const pk = db.prepare(`SELECT "notnull" FROM pragma_table_info(?) WHERE pk = 1`).get(table);
+      expect(pk).toEqual({ notnull: 1 });
+    },
+  );
+
+  it('requires user_handle and display_name for a register challenge', () => {
+    const db = openDb(':memory:');
+    expect(() => {
+      db.exec(
+        "INSERT INTO challenges (id, challenge, purpose, expires_at) VALUES ('c1', x'00', 'register', '2026-01-01T00:05:00Z')",
+      );
+    }).toThrow(/CHECK/);
+  });
+
+  it('requires user_id and tx_hash for a stepup challenge', () => {
+    const db = openDb(':memory:');
+    db.exec("INSERT INTO users VALUES ('u1', x'01', 'test-user-1', 0, '2026-01-01T00:00:00Z')");
+    expect(() => {
+      db.exec(
+        "INSERT INTO challenges (id, challenge, purpose, user_id, expires_at) VALUES ('c1', x'00', 'stepup', 'u1', '2026-01-01T00:05:00Z')",
+      );
+    }).toThrow(/CHECK/);
+  });
+
+  it('allows a login challenge without user columns', () => {
+    const db = openDb(':memory:');
+    expect(() => {
+      db.exec(
+        "INSERT INTO challenges (id, challenge, purpose, expires_at) VALUES ('c1', x'00', 'login', '2026-01-01T00:05:00Z')",
+      );
+    }).not.toThrow();
+  });
+
+  it('rejects a negative balance', () => {
+    const db = openDb(':memory:');
+    db.exec("INSERT INTO users VALUES ('u1', x'01', 'test-user-1', 100, '2026-01-01T00:00:00Z')");
+    expect(() => {
+      db.exec("UPDATE users SET balance = balance - 101 WHERE id = 'u1'");
+    }).toThrow(/CHECK/);
+  });
+
+  it.each(['credentials', 'challenges', 'sessions', 'transfers'])(
+    'indexes the user_id foreign key of %s',
+    (table) => {
+      const db = openDb(':memory:');
+      const indexed = db
+        .prepare(
+          `SELECT 1 FROM pragma_index_list(?) AS l JOIN pragma_index_info(l.name) AS i WHERE i.name = 'user_id'`,
+        )
+        .all(table);
+      expect(indexed).toHaveLength(1);
+    },
+  );
 });

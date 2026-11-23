@@ -17,9 +17,20 @@ const server = app.listen(config.port, () => {
   );
 });
 
-function shutdown() {
-  server.close(() => {
+// SIGINT and SIGTERM can both arrive (Ctrl-C twice, tsx watch, docker stop).
+// Close only once: a second server.close() fails with ERR_SERVER_NOT_RUNNING and
+// a second db.close() throws.
+let closing = false;
+function shutdown(signal: NodeJS.Signals) {
+  if (closing) return;
+  closing = true;
+  console.log(`[server] ${signal} received, shutting down`);
+  server.close((err) => {
     db.close();
+    if (err) {
+      console.error('[server] error while closing the HTTP server', err);
+      process.exit(1);
+    }
     process.exit(0);
   });
 }

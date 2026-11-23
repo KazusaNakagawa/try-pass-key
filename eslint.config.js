@@ -17,6 +17,7 @@ export default defineConfig(
   // TypeScript with type information.
   {
     files: ['**/*.ts'],
+    ignores: ['web/vite.config.ts'],
     extends: [tseslint.configs.strictTypeChecked],
     languageOptions: {
       parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
@@ -26,8 +27,16 @@ export default defineConfig(
     },
   },
 
+  // Type-checked by web/tsconfig.node.json (yarn typecheck). The ESLint project
+  // service only discovers tsconfig.json, so lint it without type information.
   {
-    files: ['server/**', 'shared/**', '**/*.config.*'],
+    files: ['web/vite.config.ts'],
+    extends: [tseslint.configs.strict],
+  },
+
+  // shared/ runs in both the browser and Node, so it gets neither set of globals.
+  {
+    files: ['server/**', '**/*.config.*'],
     languageOptions: { globals: globals.node },
   },
   { files: ['web/src/**'], languageOptions: { globals: globals.browser } },
@@ -52,7 +61,7 @@ export default defineConfig(
         {
           patterns: [
             {
-              group: ['@app/server', '@app/server/*', '**/server/**'],
+              group: ['@app/server', '@app/server/*', '**/server', '**/server.js', '**/server/**'],
               message: 'web must not import server code. Share types via @app/shared.',
             },
           ],
@@ -68,7 +77,7 @@ export default defineConfig(
         {
           patterns: [
             {
-              group: ['**/routes/**'],
+              group: ['**/routes', '**/routes.js', '**/routes/**'],
               message: 'Checks must stay independent of HTTP routes.',
             },
           ],
