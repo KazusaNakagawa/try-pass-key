@@ -111,7 +111,7 @@ ES256 の鍵は `A5 01 02 03 26 20 01 21 58 20 …` で始まる。
 | 列 | 見どころ |
 |---|---|
 | `credentials.aaguid` | 認証器の種類。1Password は `bada5566-a7aa-401f-bd96-45619a55120d`（`attestation: "none"` でもゼロにならない） |
-| `credentials.sign_count` | 1Password の同期パスキーは 0 のままだった（iCloud は未確認）。端末固定の鍵はログインのたびに増える（A4） |
+| `credentials.sign_count` | 1Password の同期パスキーは 0 のままだった（iCloud は未確認）。E2E の仮想認証器では 1 から始まり、ログインのたびに増えた。仕様上、カウンタは SHOULD で、実装しない認証器は常に 0 を返す（WebAuthn L3 §6.1.1）ので、実物のセキュリティキーで 0 のままでも異常とは限らない（A4） |
 | `credentials.backup_eligible` / `backup_state` | BE / BS。同期できる鍵か、同期済みか |
 | `credentials.last_used_at` | ログインの検証を通るたびに更新される |
 | `challenges` | 進行中・中断した ceremony の分だけ残る。期限切れは1分ごとに消える |
