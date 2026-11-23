@@ -388,7 +388,7 @@ erDiagram
     text transports "JSON配列"
     integer backup_eligible "BE"
     integer backup_state "BS"
-    text aaguid "認証器の種類 (none の場合はゼロ)"
+    text aaguid "認証器の種類 (none でもゼロとは限らない。1Password は自社の値を返す)"
     text created_at
     text last_used_at
   }

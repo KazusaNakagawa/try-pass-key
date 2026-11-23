@@ -58,7 +58,10 @@ export const RegisterVerifyResponse = z.object({
     id: Base64Url,
     /** COSE algorithm identifier (-7 = ES256, -257 = RS256). */
     alg: z.number(),
-    /** Authenticator model. All zeros with attestation "none" on most platforms. */
+    /**
+     * Authenticator model. Often all zeros with attestation "none", but not always:
+     * password-manager extensions such as 1Password report their own AAGUID.
+     */
     aaguid: z.string(),
     signCount: z.number(),
     backupEligible: z.boolean(),

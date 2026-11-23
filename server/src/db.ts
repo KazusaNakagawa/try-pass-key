@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS credentials (
   transports      TEXT NOT NULL DEFAULT '[]',  -- JSON array
   backup_eligible INTEGER NOT NULL,            -- BE flag (0/1)
   backup_state    INTEGER NOT NULL,            -- BS flag (0/1)
-  aaguid          TEXT NOT NULL,               -- all zeros with attestation "none"
+  aaguid          TEXT NOT NULL,               -- authenticator model; not always zero with "none" (1Password sends its own)
   created_at      TEXT NOT NULL,
   last_used_at    TEXT
 );

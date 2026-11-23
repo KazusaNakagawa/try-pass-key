@@ -68,7 +68,7 @@ export class SoftAuthenticator {
         .digest(),
       Buffer.from([flagsByte(flags, { at: true })]),
       Buffer.alloc(4), // signCount 0, like synced passkeys
-      Buffer.alloc(16), // AAGUID: zeros, as with attestation "none"
+      Buffer.alloc(16), // AAGUID: zeros (real authenticators may send their own, e.g. 1Password)
       idLength,
       this.credentialId,
       cbor.encode(this.coseKey),
