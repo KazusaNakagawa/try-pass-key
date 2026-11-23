@@ -23,10 +23,11 @@ Run everything through `docker compose` (never on the host).
 |---|---|
 | Start (web on http://localhost:5173) | `docker compose up -d --wait` |
 | Typecheck → lint → test. Must pass before a task is done | `docker compose run --rm server yarn check` |
+| E2E (Playwright + virtual authenticator; needs the stack running) | `docker compose --profile e2e run --rm e2e` |
 | Add a dependency | `docker compose run --rm server yarn workspace @app/<server\|web\|shared> add <pkg>@<exact-version>` |
 | Format | `docker compose run --rm server yarn format` |
 | Inspect the DB | `docker compose exec server sqlite3 /data/app.db` |
-| Reset everything (DB, node_modules) | `docker compose down -v` |
+| Reset everything (DB, node_modules). Also required when the server refuses an outdated DB schema | `docker compose down -v` |
 
 The host's Docker file sharing can lag about 10 seconds behind file changes (docs/01 K6). If a check reports a file you just deleted or misses one you just created, wait and rerun.
 

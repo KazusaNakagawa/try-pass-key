@@ -1,17 +1,21 @@
 import { A1 } from './checks/A1.js';
 import { A2 } from './checks/A2.js';
 import { A3 } from './checks/A3.js';
+import { A4 } from './checks/A4.js';
 import { C1 } from './checks/C1.js';
 import { C2 } from './checks/C2.js';
 import { C3 } from './checks/C3.js';
 import { C4 } from './checks/C4.js';
 import { C5 } from './checks/C5.js';
+import { L1 } from './checks/L1.js';
+import { L2 } from './checks/L2.js';
+import { L3 } from './checks/L3.js';
 import { R1 } from './checks/R1.js';
 import { R2 } from './checks/R2.js';
 import { R3 } from './checks/R3.js';
 import { R4 } from './checks/R4.js';
 import { R5 } from './checks/R5.js';
-import type { Check, RegistrationContext } from './checks/types.js';
+import type { AuthenticationContext, Check, RegistrationContext } from './checks/types.js';
 
 /**
  * Every check a registration must pass, in order. Routes use this constant and
@@ -36,6 +40,27 @@ export const REGISTRATION_CHECKS: readonly Check<RegistrationContext>[] = Object
   R3,
   R4,
   R5,
+]);
+
+/**
+ * Every check a login must pass, in order. Same rules as REGISTRATION_CHECKS:
+ * C4 first, no way to turn a check off. L1 → L2 → L3 because L2 and L3 need the
+ * stored credential, and A4 last because the counter means nothing until the
+ * signature is known to be genuine.
+ */
+export const AUTHENTICATION_CHECKS: readonly Check<AuthenticationContext>[] = Object.freeze([
+  C4,
+  C2,
+  C5,
+  C1,
+  C3,
+  A1,
+  A2,
+  A3,
+  L1,
+  L2,
+  L3,
+  A4,
 ]);
 
 export function runChecks<Ctx>(ctx: Ctx, checks: readonly Check<Ctx>[]): void {

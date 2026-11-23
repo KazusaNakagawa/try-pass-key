@@ -50,14 +50,18 @@ CREATE TABLE IF NOT EXISTS challenges (
 CREATE INDEX IF NOT EXISTS challenges_expires_at ON challenges(expires_at);
 CREATE INDEX IF NOT EXISTS challenges_user_id ON challenges(user_id);
 
+-- The session token (32 random bytes) lives only in the cookie. The DB keeps its
+-- SHA-256, so a leaked database does not hand out live sessions.
 CREATE TABLE IF NOT EXISTS sessions (
-  id               TEXT NOT NULL PRIMARY KEY,  -- random (32 bytes)
+  id               TEXT NOT NULL PRIMARY KEY,  -- SHA-256(token), base64url
   user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  auth_at          TEXT NOT NULL,
+  auth_at          TEXT NOT NULL,              -- when the user logged in (or registered)
+  last_seen_at     TEXT NOT NULL,              -- for the idle timeout
   stepup_at        TEXT,
   approved_tx_hash TEXT,                       -- single use
-  expires_at       TEXT NOT NULL
+  expires_at       TEXT NOT NULL               -- absolute timeout
 );
+CREATE INDEX IF NOT EXISTS sessions_expires_at ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS sessions_user_id ON sessions(user_id);
 
 CREATE TABLE IF NOT EXISTS transfers (
@@ -70,6 +74,24 @@ CREATE TABLE IF NOT EXISTS transfers (
 CREATE INDEX IF NOT EXISTS transfers_user_id ON transfers(user_id);
 `;
 
+/**
+ * Bump when SCHEMA_SQL changes. There are no migrations in this PoC (D26):
+ * CREATE TABLE IF NOT EXISTS silently keeps an old table, so an outdated
+ * database is refused instead, and `docker compose down -v` recreates it.
+ */
+export const SCHEMA_VERSION = 2;
+
+export class OutdatedSchemaError extends Error {
+  constructor(found: number) {
+    super(
+      `database schema version ${found} is older than ${SCHEMA_VERSION}. ` +
+        'This PoC has no migrations: reset with `docker compose down -v` ' +
+        '(and delete the old localhost passkeys from your password manager).',
+    );
+    this.name = 'OutdatedSchemaError';
+  }
+}
+
 /** Opens the database and creates the schema if it does not exist yet. */
 export function openDb(path: string): DatabaseSync {
   const db = new DatabaseSync(path);
@@ -77,7 +99,20 @@ export function openDb(path: string): DatabaseSync {
   if (path !== ':memory:') {
     db.exec('PRAGMA journal_mode = WAL;');
   }
+  const { user_version: version } = db.prepare('PRAGMA user_version').get() as {
+    user_version: number;
+  };
+  if (version === 0 && listTables(db).length > 0) {
+    // Created before versioning existed.
+    db.close();
+    throw new OutdatedSchemaError(0);
+  }
+  if (version !== 0 && version < SCHEMA_VERSION) {
+    db.close();
+    throw new OutdatedSchemaError(version);
+  }
   db.exec(SCHEMA_SQL);
+  db.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
   return db;
 }
 

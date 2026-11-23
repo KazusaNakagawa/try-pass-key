@@ -140,7 +140,7 @@ flowchart LR
 | `deps` | `yarn install` を実行して終了する。CI（`CI=true`）では lockfile を書き換えない immutable install になる | なし | `.`（`/app`）、`node_modules`、`yarn_cache` |
 | `web` | Vite 開発サーバー。`/api` を `server` へプロキシ | `127.0.0.1:${WEB_PORT:-5173}` | `.`（`/app`）、`node_modules` |
 | `server` | Express API | 公開しない（`web` 経由のみ） | `.`（`/app`）、`node_modules`、`sqlite_data` |
-| `e2e`（任意、M3 で追加） | Playwright のヘッドレス Chromium。`profiles` で必要時のみ起動 | なし | `.`（`/app`）、`e2e_node_modules`（イメージが違うため別ボリューム） |
+| `e2e`（任意） | Playwright のヘッドレス Chromium。`profiles` で必要時のみ起動。`network_mode: service:web` で web と同じネットワークを使い、`http://localhost:<WEB_PORT>` を開く（D29） | なし | `.`（`/app`）、`node_modules`（Node のバージョンが同じで依存は JS のみなので共有） |
 | `tunnel`（任意） | ngrok / cloudflared。クロスデバイス認証を試すときだけ `profiles` で起動 | なし | なし |
 
 **WebAuthn との整合**
@@ -157,7 +157,7 @@ flowchart LR
 | 起動 | `docker compose up -d` |
 | ログ確認 | `docker compose logs -f server` |
 | 検査（typecheck → lint → test） | `docker compose run --rm server yarn check` |
-| E2E | `docker compose --profile e2e run --rm e2e yarn e2e` |
+| E2E | `docker compose --profile e2e run --rm e2e` |
 | DBを覗く | `docker compose exec server sqlite3 /data/app.db`（`sqlite3` CLI は Dockerfile で入れる） |
 | 完全初期化 | `docker compose down -v` |
 | クロスデバイス試験 | `docker compose --profile tunnel up -d` |
@@ -235,7 +235,7 @@ sequenceDiagram
   A-->>B: authenticatorData + clientDataJSON + signature + userHandle
   B->>S: POST /api/login/verify（Cookie: ceremony）
   S->>D: Cookie の行IDで challenge を取得し即削除
-  S->>D: credentialId で credential を検索、userHandle の一致を確認
+  S->>D: credentialId で credential を、userHandle でユーザーを検索し、credential がそのユーザーのものか確認（L2）
   S->>S: 6章の認証時検証（公開鍵で署名検証）
   S->>D: signCount, last_used_at, BS を更新
   S->>S: 既存セッションを破棄し新しいセッションIDを発行
@@ -243,6 +243,8 @@ sequenceDiagram
 ```
 
 `allowCredentials` を空にすることで、ユーザーがIDを入力せずに認証器側のパスキー一覧から選べる。サーバーは返ってきた `userHandle` と `credentialId` からユーザーを特定する。
+
+セッションは `userHandle` が指すユーザーに対して発行する。`credentialId` の持ち主ではなく `userHandle` を起点にするのは、仕様の手順どおりであり、L2 を外したときに「攻撃者が自分の鍵で署名し、被害者の `userHandle` を送ると被害者としてログインできる」ことを再現できるため（D28）。
 
 ### 5.3 ステップアップ認証（送金前の再認証）
 
@@ -405,9 +407,10 @@ erDiagram
     text expires_at
   }
   sessions {
-    text id PK "乱数 (32byte)"
+    text id PK "SHA-256(トークン)。トークン(32byte乱数)は Cookie にだけある"
     text user_id FK
-    text auth_at "ログイン時刻"
+    text auth_at "ログイン(または登録)時刻"
+    text last_seen_at "最終アクセス(アイドル期限用)"
     text stepup_at "直近の再認証時刻"
     text approved_tx_hash "承認済み取引 (使い捨て)"
     text expires_at
@@ -441,7 +444,9 @@ challenge は登録・認証前のためユーザーと紐づかないことが�
 | 項目 | 値 |
 |---|---|
 | 方式 | サーバー側セッション（JWTは使わない。即時失効を確実にするため） |
-| ID再発行 | ログイン時とステップアップ時に再発行（セッション固定攻撃対策） |
+| ID再発行 | ログイン時・登録完了時・ステップアップ時に再発行（セッション固定攻撃対策）。既存のセッションは破棄する |
+| 保存形式 | DB にはトークンの SHA-256 だけを置く。DB が漏れても有効なセッションは渡らない（D27） |
+| Cookie | `session`。`HttpOnly; SameSite=Lax; Path=/`、HTTPS 時は `Secure`。状態変更系は `Origin` ヘッダーの検証で CSRF を防ぐ |
 | アイドル期限 | 30分 |
 | 絶対期限 | 8時間 |
 | ステップアップ有効期間 | 5分、かつ承認した1取引のみ |
@@ -616,3 +621,4 @@ try-pass-key/
 | K7 | Safari と Chrome で挙動が違う（Conditional UI、エラーの出方） | Chrome だけで作ると Safari で動かない | 12章の受け入れ基準どおり両方で確認する。差分は M8 の振り返りに記録する |
 | K8 | 一時 Cookie `ceremony` は1つしか持てない | 複数タブで同時に ceremony を始めると、後のタブが前のタブの challenge を上書きし、前のタブは `invalid_challenge` になる。Conditional UI はページ表示時に options を取るので起きやすい | PoC では失敗させ、options を取り直す（Conditional UI は再起動）。本番で問題になる場合は Cookie に複数の行IDを持たせる |
 | K9 | ブラウザは `localhost` を IPv6 の `::1` から試す。別の開発サーバーが `[::1]:5173` で待ち受けていると、そちらが応答する | 本PoCではなく別アプリの画面や API が返る。Docker 側は衝突を報告しない（M1 で発生） | `.env` の `WEB_PORT` で空いているポートに変える（`RP_ORIGIN` も自動で追従する）。画面の「サーバー状態」に `status: ok` とテーブル一覧が出ることで見分ける |
+| K10 | Chromium の仮想認証器（自動のユーザー存在シミュレーション）は、Conditional UI の要求にもすぐ応答する | 実機ではユーザーが候補を選ぶまで待つ要求が、E2E では即座にログインになる。ログアウト直後に再ログインしてしまい、ボタンでのログインを試せない（M3 で発生） | E2E を分ける。Conditional UI はその自動応答で確かめ、ボタンでのログインは `isConditionalMediationAvailable` を false にして「Conditional UI 非対応のブラウザ」として確かめる。実機での Conditional UI は人が確認する |

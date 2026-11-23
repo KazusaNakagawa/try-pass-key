@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { REGISTRATION_CHECKS } from '../src/webauthn/pipeline.js';
+import { AUTHENTICATION_CHECKS, REGISTRATION_CHECKS } from '../src/webauthn/pipeline.js';
 
 /**
  * Guards docs/01 §6 against silent removal. If a check is dropped from the
@@ -37,5 +37,36 @@ describe('verification pipeline', () => {
 
   it('consumes the challenge (C4) before any other check', () => {
     expect(REGISTRATION_CHECKS[0]?.id).toBe('C4');
+  });
+
+  describe('login', () => {
+    const AUTHENTICATION_ITEMS = [
+      'C1',
+      'C2',
+      'C3',
+      'C4',
+      'C5',
+      'A1',
+      'A2',
+      'A3',
+      'A4',
+      'L1',
+      'L2',
+      'L3',
+    ];
+
+    it('runs exactly the login items from docs/01 §6', () => {
+      const ids = AUTHENTICATION_CHECKS.map((c) => c.id);
+      expect(new Set(ids).size).toBe(ids.length);
+      expect([...ids].sort(byId)).toEqual([...AUTHENTICATION_ITEMS].sort(byId));
+    });
+
+    it('cannot be modified at runtime', () => {
+      expect(Object.isFrozen(AUTHENTICATION_CHECKS)).toBe(true);
+    });
+
+    it('consumes the challenge (C4) before any other check', () => {
+      expect(AUTHENTICATION_CHECKS[0]?.id).toBe('C4');
+    });
   });
 });

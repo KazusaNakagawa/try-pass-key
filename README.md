@@ -5,7 +5,7 @@
 正規ユーザーとしてシステムを操作され資産を抜かれる「二次被害」への備えとして、ログイン時のパスキー認証に加え、送金など高リスク操作の直前に再認証するステップアップ認証まで実装します。背景は [docs/00-background.md](docs/00-background.md) を参照してください。
 
 > [!NOTE]
-> 現在は M1（骨組み: Docker で起動し SQLite のスキーマを作るところ）まで実装済みです。進捗は [マイルストーン](docs/01-architecture-proposal-poc.md#11-マイルストーン) を参照してください。
+> 現在は M3（パスキーの登録と、ユーザー名なしログイン）まで実装済みです。進捗は [マイルストーン](docs/01-architecture-proposal-poc.md#11-マイルストーン) を参照してください。
 
 ## このPoCで確かめること
 
@@ -23,6 +23,7 @@ TypeScript / Express / Vite / SQLite を Docker Compose で動かします。ホ
 ```bash
 docker compose up -d                    # 起動 → http://localhost:5173
 docker compose run --rm server yarn check # 型検査・lint・テスト
+docker compose --profile e2e run --rm e2e # E2E（仮想認証器）
 docker compose down -v                  # DB・依存ごと完全に初期化
 ```
 

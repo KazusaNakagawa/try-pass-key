@@ -3,4 +3,5 @@
 // always read the current schema.
 export * from './error.js';
 export * from './health.js';
+export * from './login.js';
 export * from './registration.js';

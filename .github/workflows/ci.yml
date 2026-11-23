@@ -45,6 +45,8 @@ jobs:
           echo "$body"
           echo "$body" | grep -q '"status":"ok"'
           echo "$body" | grep -q '"credentials"'
+      - name: E2E (Playwright + virtual authenticator)
+        run: docker compose --profile e2e run --rm e2e
       - name: Nothing leaked to the host checkout
         run: |
           # ./node_modules is only the empty mount point of the named volume.

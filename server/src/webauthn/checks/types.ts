@@ -70,6 +70,33 @@ export interface RegistrationContext extends CeremonyContext {
   isCredentialRegistered(credentialId: Buffer): boolean;
 }
 
+/** A credential as stored at registration. */
+export interface StoredCredential {
+  id: Buffer;
+  userId: string;
+  /** COSE_Key bytes. */
+  publicKey: Buffer;
+  signCount: number;
+  backupEligible: boolean;
+  backupState: boolean;
+}
+
+export interface UserRecord {
+  id: string;
+  userHandle: Buffer;
+  displayName: string;
+}
+
+export interface AuthenticationContext extends CeremonyContext {
+  /** Credential found by the response's credential ID (L1). */
+  credential: StoredCredential | undefined;
+  /** userHandle returned by the authenticator (user.id from registration). */
+  userHandle: Buffer | undefined;
+  /** The user that userHandle names. The session is created for this user (L2). */
+  userByHandle: UserRecord | undefined;
+  signature: Buffer;
+}
+
 export interface Check<Ctx> {
   id: CheckId;
   /** One line: what is verified. */
