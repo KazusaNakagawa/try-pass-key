@@ -63,6 +63,7 @@ services:
     environment:
       API_TARGET: http://server:3000
       VITE_USE_POLLING: ${WATCH_POLLING:-true}
+      WEB_PORT: ${WEB_PORT:-5173}
     volumes:
       - .:/app
       - node_modules:/app/node_modules
@@ -73,16 +74,43 @@ services:
     # listens on [::1]:<WEB_PORT>, it answers instead of this one, and Docker
     # Desktop does not report the conflict. Set WEB_PORT in .env to a free port.
     ports:
-      - '127.0.0.1:${WEB_PORT:-5173}:5173'
+      # Same port inside and outside: see web/vite.config.ts.
+      - '127.0.0.1:${WEB_PORT:-5173}:${WEB_PORT:-5173}'
     healthcheck:
       test:
         - CMD
         - node
         - -e
-        - "fetch('http://localhost:5173/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+        - "fetch('http://localhost:'+(process.env.WEB_PORT||5173)+'/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
       interval: 5s
       timeout: 3s
       retries: 20
+
+  # E2E with Playwright and a virtual authenticator (docs/01 §15.3).
+  # Run: docker compose --profile e2e run --rm e2e
+  e2e:
+    # Must match @playwright/test in e2e/package.json (the image ships the browsers).
+    image: mcr.microsoft.com/playwright:v1.65.1-noble
+    profiles: [e2e]
+    # Share web's network namespace: the browser opens http://localhost:<WEB_PORT>,
+    # a secure context with the same origin as on the host. (http://web:5173 would
+    # be neither secure nor the RP origin.)
+    network_mode: service:web
+    depends_on:
+      web:
+        condition: service_healthy
+      server:
+        condition: service_healthy
+    working_dir: /app/e2e
+    environment:
+      WEB_PORT: ${WEB_PORT:-5173}
+      CI: ${CI:-}
+    volumes:
+      - .:/app
+      # Same volume as the other services: the image has the same Node version
+      # and the dependencies are plain JavaScript.
+      - node_modules:/app/node_modules
+    command: ['node', '../node_modules/@playwright/test/cli.js', 'test']
 
 volumes:
   node_modules:

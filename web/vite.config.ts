@@ -7,7 +7,10 @@ export default defineConfig({
   server: {
     // Listen on all interfaces inside the container; compose publishes it on 127.0.0.1 only.
     host: true,
-    port: 5173,
+    // Same port inside the container as on the host (compose maps WEB_PORT:WEB_PORT),
+    // so the origin is http://localhost:<WEB_PORT> both for the host browser and for
+    // the E2E browser that shares this container's network.
+    port: Number(process.env.WEB_PORT ?? 5173),
     strictPort: true,
     // Same-origin proxy: the browser only ever talks to http://localhost:5173,
     // so there is no CORS and the session cookie stays first-party.

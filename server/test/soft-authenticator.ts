@@ -3,8 +3,8 @@
  * a real authenticator + browser would, but every field can be tampered with,
  * so tests can produce the malicious inputs that §6 checks must reject.
  */
-import { createHash, generateKeyPairSync, randomBytes, type KeyObject } from 'node:crypto';
-import type { RegistrationResponseJSON } from '@app/shared';
+import { createHash, generateKeyPairSync, randomBytes, sign, type KeyObject } from 'node:crypto';
+import type { AuthenticationResponse, RegistrationResponseJSON } from '@app/shared';
 import { standardCbor } from './cbor-encoder.js';
 
 const cbor = standardCbor;
@@ -29,6 +29,23 @@ export interface AttestationOverrides {
   flags?: Partial<Flags>;
   /** Credential ID the browser reports (rawId/id), independent of authData. */
   reportedCredentialId?: Buffer;
+}
+
+export interface AssertionOverrides {
+  type?: string;
+  origin?: string;
+  crossOrigin?: boolean;
+  challenge?: string;
+  rpId?: string;
+  flags?: Partial<Flags>;
+  /** signCount written into authenticatorData. Defaults to 0 (synced passkey). */
+  signCount?: number;
+  /** userHandle returned to the RP; null omits it. */
+  userHandle?: Buffer | null;
+  /** Credential ID reported as id/rawId. */
+  credentialId?: Buffer;
+  /** Signs with this key instead of the credential's own (a forged signature). */
+  signWith?: KeyObject;
 }
 
 export class SoftAuthenticator {
@@ -103,6 +120,54 @@ export class SoftAuthenticator {
       authenticatorAttachment: 'platform',
     };
   }
+
+  /** navigator.credentials.get() + browser serialization (AuthenticationResponseJSON). */
+  getAssertion(
+    input: { challenge: string; origin: string; rpId: string; userHandle: Buffer },
+    o: AssertionOverrides = {},
+  ): AuthenticationResponse {
+    const clientDataJSON = Buffer.from(
+      JSON.stringify({
+        type: o.type ?? 'webauthn.get',
+        challenge: o.challenge ?? input.challenge,
+        origin: o.origin ?? input.origin,
+        crossOrigin: o.crossOrigin ?? false,
+      }),
+    );
+    const counter = Buffer.alloc(4);
+    counter.writeUInt32BE(o.signCount ?? 0);
+    const authData = Buffer.concat([
+      createHash('sha256')
+        .update(o.rpId ?? input.rpId)
+        .digest(),
+      Buffer.from([flagsByte({ ...this.defaultFlags, ...o.flags }, { at: false })]),
+      counter,
+    ]);
+    const signed = Buffer.concat([authData, createHash('sha256').update(clientDataJSON).digest()]);
+    const key = o.signWith ?? this.privateKey;
+    const signature = signWithKey(key, signed);
+    const id = (o.credentialId ?? this.credentialId).toString('base64url');
+    const userHandle = o.userHandle === undefined ? input.userHandle : o.userHandle;
+    return {
+      id,
+      rawId: id,
+      type: 'public-key',
+      response: {
+        clientDataJSON: clientDataJSON.toString('base64url'),
+        authenticatorData: authData.toString('base64url'),
+        signature: signature.toString('base64url'),
+        ...(userHandle ? { userHandle: userHandle.toString('base64url') } : {}),
+      },
+      clientExtensionResults: {},
+      authenticatorAttachment: 'platform',
+    };
+  }
+}
+
+function signWithKey(key: KeyObject, data: Buffer): Buffer {
+  if (key.asymmetricKeyType === 'ed25519') return sign(null, data, key);
+  if (key.asymmetricKeyType === 'ec') return sign('sha256', data, { key, dsaEncoding: 'der' });
+  return sign('sha256', data, key);
 }
 
 function flagsByte(f: Flags, extra: { at: boolean }): number {

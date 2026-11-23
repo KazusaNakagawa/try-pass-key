@@ -14,10 +14,13 @@ interface DbChallengeRow {
   expires_at: string;
 }
 
+export type ChallengeInput =
+  { purpose: 'register'; userHandle: Buffer; displayName: string } | { purpose: 'login' };
+
 export function issueChallenge(
   db: DatabaseSync,
   now: Date,
-  input: { purpose: 'register'; userHandle: Buffer; displayName: string },
+  input: ChallengeInput,
 ): { id: string; challenge: Buffer } {
   const id = randomBytes(16).toString('base64url');
   const challenge = randomBytes(32);
@@ -25,7 +28,14 @@ export function issueChallenge(
   db.prepare(
     `INSERT INTO challenges (id, challenge, purpose, user_handle, display_name, expires_at)
      VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(id, challenge, input.purpose, input.userHandle, input.displayName, expiresAt);
+  ).run(
+    id,
+    challenge,
+    input.purpose,
+    input.purpose === 'register' ? input.userHandle : null,
+    input.purpose === 'register' ? input.displayName : null,
+    expiresAt,
+  );
   return { id, challenge };
 }
 

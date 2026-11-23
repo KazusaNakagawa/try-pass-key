@@ -34,3 +34,8 @@ pre {
 pre:empty {
   display: none;
 }
+pre[hidden],
+section[hidden],
+button[hidden] {
+  display: none;
+}

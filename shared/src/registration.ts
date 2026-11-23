@@ -67,6 +67,8 @@ export type RegistrationResponseJSON = z.input<typeof RegistrationResponse>;
 export const RegisterVerifyResponse = z.object({
   userId: z.string(),
   displayName: z.string(),
+  /** Registration also logs the user in. */
+  authAt: z.string(),
   credential: z.object({
     id: Base64Url,
     /** COSE algorithm identifier (-7 = ES256, -257 = RS256). */

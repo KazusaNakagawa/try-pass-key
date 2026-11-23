@@ -6,7 +6,8 @@
   "workspaces": [
     "shared",
     "server",
-    "web"
+    "web",
+    "e2e"
   ],
   "scripts": {
     "check": "yarn typecheck && yarn lint && yarn test",

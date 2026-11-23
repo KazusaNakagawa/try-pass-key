@@ -12,6 +12,7 @@ Documents under `docs/` are written in Japanese. Respond to the user in Japanese
 | `docs/00-background.md` | Background and motivation |
 | `docs/01-architecture-proposal-poc.md` | Architecture proposal. Architecture content only |
 | `docs/02-knowledge-passkey.md` | Research notes. Anything that is not architecture goes here |
+| `docs/03-hands-on-verification.md` | How a person verifies things by hand: real devices, DB snapshot, session/cookie checks. Add steps here when a new manual check is found |
 | `docs/decisions.md` | Decision log. Add a row whenever a design decision is made |
 | `docs/worklog/YYYY-MM-DD.md` | Daily work log (done / insights / issues / next) |
 
@@ -23,10 +24,14 @@ Run everything through `docker compose` (never on the host).
 |---|---|
 | Start (web on http://localhost:5173) | `docker compose up -d --wait` |
 | Typecheck → lint → test. Must pass before a task is done | `docker compose run --rm server yarn check` |
+| E2E (Playwright + virtual authenticator) on a throwaway stack | `bash scripts/e2e.sh` |
 | Add a dependency | `docker compose run --rm server yarn workspace @app/<server\|web\|shared> add <pkg>@<exact-version>` |
 | Format | `docker compose run --rm server yarn format` |
-| Inspect the DB | `docker compose exec server sqlite3 /data/app.db` |
-| Reset everything (DB, node_modules) | `docker compose down -v` |
+| Inspect the DB | `docker compose exec server sqlite3 /data/app.db` (run `PRAGMA foreign_keys = ON;` first before deleting, or ON DELETE CASCADE does not fire) |
+| Copy a consistent DB snapshot out of the volume for a desktop DB client (default ~/Downloads; refuses paths inside the repo) | `bash scripts/db-snapshot.sh [dest]` |
+| Reset everything (DB, node_modules). Also required when the server refuses an outdated DB schema | `docker compose down -v` |
+
+Never run the E2E service against the development stack (`docker compose --profile e2e run e2e`): it registers test users in the development DB, and a different `WEB_PORT` makes compose recreate the running containers. `scripts/e2e.sh` uses its own project name, volumes and port, and removes them afterwards.
 
 The host's Docker file sharing can lag about 10 seconds behind file changes (docs/01 K6). If a check reports a file you just deleted or misses one you just created, wait and rerun.
 

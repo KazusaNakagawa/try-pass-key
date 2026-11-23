@@ -2,7 +2,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { listTables, openDb } from './db.js';
+import { DatabaseSync } from 'node:sqlite';
+import { listTables, openDb, OutdatedSchemaError, SCHEMA_VERSION } from './db.js';
 
 describe('openDb', () => {
   it('creates every table from docs/01 §8', () => {
@@ -32,7 +33,7 @@ describe('openDb', () => {
     const db = openDb(':memory:');
     expect(() => {
       db.exec(
-        "INSERT INTO sessions VALUES ('s1', 'no-such-user', '2026-01-01T00:00:00Z', NULL, NULL, '2026-01-01T08:00:00Z')",
+        "INSERT INTO sessions (id, user_id, auth_at, last_seen_at, expires_at) VALUES ('s1', 'no-such-user', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T08:00:00Z')",
       );
     }).toThrow(/FOREIGN KEY/);
   });
@@ -103,4 +104,45 @@ describe('openDb', () => {
       expect(indexed).toHaveLength(1);
     },
   );
+
+  it('refuses a database created before schema versioning', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'db-test-'));
+    try {
+      const path = join(dir, 'app.db');
+      const legacy = new DatabaseSync(path);
+      legacy.exec('CREATE TABLE users (id TEXT PRIMARY KEY)');
+      legacy.close();
+      expect(() => openDb(path)).toThrow(OutdatedSchemaError);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses an older schema version', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'db-test-'));
+    try {
+      const path = join(dir, 'app.db');
+      openDb(path).close();
+      const db = new DatabaseSync(path);
+      db.exec(`PRAGMA user_version = ${SCHEMA_VERSION - 1}`);
+      db.close();
+      expect(() => openDb(path)).toThrow(/down -v/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses a newer schema version (opened from an older checkout)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'db-test-'));
+    try {
+      const path = join(dir, 'app.db');
+      openDb(path).close();
+      const db = new DatabaseSync(path);
+      db.exec(`PRAGMA user_version = ${SCHEMA_VERSION + 1}`);
+      db.close();
+      expect(() => openDb(path)).toThrow(/newer/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

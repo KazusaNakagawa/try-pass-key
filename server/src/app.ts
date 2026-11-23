@@ -5,7 +5,9 @@ import type { Config } from './config.js';
 import { listTables } from './db.js';
 import { errorHandler } from './http/errors.js';
 import { requireSameOrigin } from './http/origin.js';
+import { loginRoutes } from './routes/login.js';
 import { registerRoutes } from './routes/register.js';
+import { sessionRoutes } from './routes/session.js';
 
 export interface AppDeps {
   db: DatabaseSync;
@@ -26,7 +28,10 @@ export function createApp(deps: AppDeps) {
     res.json(body);
   });
 
-  app.use(registerRoutes({ db: deps.db, config: deps.config, now }));
+  const routeDeps = { db: deps.db, config: deps.config, now };
+  app.use(registerRoutes(routeDeps));
+  app.use(loginRoutes(routeDeps));
+  app.use(sessionRoutes(routeDeps));
 
   app.use(errorHandler);
   return app;

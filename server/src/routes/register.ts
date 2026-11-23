@@ -5,6 +5,7 @@ import {
   type RegisterVerifyResponse,
 } from '@app/shared';
 import { CEREMONY_COOKIE, ceremonyCookieOptions, readCookie } from '../http/cookies.js';
+import { startSession } from '../session/http.js';
 import { REGISTRATION_CHECKS, runChecks } from '../webauthn/pipeline.js';
 import {
   buildRegistrationContext,
@@ -31,12 +32,13 @@ export function registerRoutes(deps: RegistrationDeps): Router {
 
     const ctx = buildRegistrationContext(deps, { response, ceremonyId });
     runChecks(ctx, REGISTRATION_CHECKS);
-    const body: RegisterVerifyResponse = saveRegistration(
-      deps,
-      ctx,
-      response.response.transports ?? [],
-    );
-    // Session issuance after registration comes with login in M3 (D22).
+    const saved = saveRegistration(deps, ctx, response.response.transports ?? []);
+    // Registering also logs the user in, with a fresh session ID (D22).
+    const session = startSession(deps, req, res, {
+      id: saved.userId,
+      displayName: saved.displayName,
+    });
+    const body: RegisterVerifyResponse = { ...saved, authAt: session.authAt };
     res.json(body);
   });
 

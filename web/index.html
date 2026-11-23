@@ -11,7 +11,27 @@
       <h1>try-pass-key</h1>
       <p>パスキー（WebAuthn）学習用 PoC</p>
 
-      <section>
+      <section id="session-section" aria-live="polite">
+        <h2>ログイン状態</h2>
+        <pre id="me">確認中...</pre>
+        <!-- Outside #login-section, which is hidden once logged in, so the outcome stays visible. -->
+        <pre id="login-result" aria-live="polite"></pre>
+        <button id="logout" type="button" hidden>ログアウト</button>
+      </section>
+
+      <section id="login-section">
+        <h2>パスキーでログイン</h2>
+        <form id="login-form">
+          <label>
+            ユーザー名（入力欄を選ぶと、保存済みのパスキーが候補に出ます）
+            <!-- "webauthn" in autocomplete enables Conditional UI (passkeys in autofill). -->
+            <input id="login-username" name="username" autocomplete="username webauthn" />
+          </label>
+          <button id="login-button" type="button">パスキーでログイン</button>
+        </form>
+      </section>
+
+      <section id="register-section">
         <h2>パスキーを作成</h2>
         <form id="register-form">
           <label>
