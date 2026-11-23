@@ -31,24 +31,34 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
-      - name: Detect app scaffold
-        id: scaffold
-        run: |
-          if [[ -f compose.yaml ]]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::compose.yaml not found yet (before M1). Skipping yarn check."
-          fi
-      - name: Build images
-        if: steps.scaffold.outputs.present == 'true'
-        run: docker compose build server
-      - name: Install dependencies
-        if: steps.scaffold.outputs.present == 'true'
-        run: docker compose run --rm server yarn install --immutable
+      - name: Build image
+        run: docker compose build
+      # The deps service runs first (depends_on). CI=true makes Yarn install immutably,
+      # so a yarn.lock that is out of date fails here.
       - name: yarn check
-        if: steps.scaffold.outputs.present == 'true'
         run: docker compose run --rm server yarn check
+      - name: Start the stack (M1 acceptance)
+        run: docker compose up -d --wait
+      - name: Health check through the web proxy
+        run: |
+          body="$(curl -fsS http://localhost:5173/api/health)"
+          echo "$body"
+          echo "$body" | grep -q '"status":"ok"'
+          echo "$body" | grep -q '"credentials"'
+      - name: Nothing leaked to the host checkout
+        run: |
+          # ./node_modules is only the empty mount point of the named volume.
+          leaked="$(find node_modules -mindepth 1 -maxdepth 1 2>/dev/null; \
+            ls -d shared/node_modules server/node_modules web/node_modules .yarn 2>/dev/null; \
+            git ls-files --others --exclude-standard)"
+          if [[ -n "$leaked" ]]; then
+            echo "::error::Files were created on the host:"
+            echo "$leaked"
+            exit 1
+          fi
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs
       - name: Tear down
-        if: always() && steps.scaffold.outputs.present == 'true'
+        if: always()
         run: docker compose down -v

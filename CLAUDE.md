@@ -15,6 +15,21 @@ Documents under `docs/` are written in Japanese. Respond to the user in Japanese
 | `docs/decisions.md` | Decision log. Add a row whenever a design decision is made |
 | `docs/worklog/YYYY-MM-DD.md` | Daily work log (done / insights / issues / next) |
 
+## Commands
+
+Run everything through `docker compose` (never on the host).
+
+| Purpose | Command |
+|---|---|
+| Start (web on http://localhost:5173) | `docker compose up -d --wait` |
+| Typecheck → lint → test. Must pass before a task is done | `docker compose run --rm server yarn check` |
+| Add a dependency | `docker compose run --rm server yarn workspace @app/<server\|web\|shared> add <pkg>@<exact-version>` |
+| Format | `docker compose run --rm server yarn format` |
+| Inspect the DB | `docker compose exec server sqlite3 /data/app.db` |
+| Reset everything (DB, node_modules) | `docker compose down -v` |
+
+The host's Docker file sharing can lag about 10 seconds behind file changes (docs/01 K6). If a check reports a file you just deleted or misses one you just created, wait and rerun.
+
 ## Leaving a work trace
 
 - At each checkpoint, write the day's log in `docs/worklog/`. Append if the file for that date already exists.

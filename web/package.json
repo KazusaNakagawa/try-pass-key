@@ -1,0 +1,19 @@
+{
+  "name": "@app/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@app/shared": "workspace:*",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "typescript": "6.0.3",
+    "vite": "8.3.8"
+  }
+}
