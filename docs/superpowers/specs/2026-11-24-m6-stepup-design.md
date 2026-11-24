@@ -109,7 +109,7 @@ export const TRANSFER_GATE_CHECKS: readonly Check<TransferContext>[] = Object.fr
   }
   ```
   S3 は `consumeApproval()` を呼んで `approval` に入れ、無ければ「承認がない（未実施または使用済み）」、`stepupAt` から5分を過ぎていれば「期限切れ」で拒否する。S2 は `approval.approvedTxHash === txHash` を確かめる（`approval` が無いときも拒否）
-- 消費は1文で行う: `UPDATE sessions SET approved_tx_hash = NULL WHERE id = ? AND approved_tx_hash IS NOT NULL RETURNING stepup_at, approved_tx_hash`。同じ承認で同時に2つの送金が来ても、1つしか消費できない
+- 消費は「読んでから、読んだ値と一致するときだけ消す」条件付き UPDATE で行う（`SELECT stepup_at, approved_tx_hash` → `UPDATE sessions SET approved_tx_hash = NULL WHERE id = ? AND approved_tx_hash = ?`）。同じ承認で同時に2つの送金が来ても、1つしか消費できない。（実装時の訂正: 当初は `UPDATE ... RETURNING` の1文としていたが、SQLite の `RETURNING` は更新後の値、つまり消した NULL を返すため使えない。テストで判明した）
 - テストで S3 を外すと、承認は消費されず期限も見られない。S2 が読む `approval` は、テスト用の context では消費せずに読んだ値を入れておく（harness が用意する）
 - S2 は承認が無いときも拒否する（承認の有無を S3 だけに任せると、S2 単体では承認なしを通してしまい、db.ts のコメントが警告している fail-open になるため）。そのため「ステップアップなしの送金」は S3 を外しても S2 が拒否する（`withoutCheckRejectedBy: 'S2'`）。S3 を外すと通る攻撃は「期限切れ」と「2回目の送金」
 - 「同じ承認での2回目の送金」のシナリオは、1回目も2回目も S3 を外したゲートで通す（1回目を本物のゲートで通すと承認が消費済みになり、2回目は S2 が承認なしで拒否してしまい、S3 の役割を示せない）

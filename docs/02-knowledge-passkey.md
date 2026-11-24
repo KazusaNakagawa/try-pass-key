@@ -56,7 +56,7 @@ PoC では AAGUID と BE/BS を記録・表示する。実機では、1Password 
 
 ## 2.5 検証ライブラリは何を見て、何をアプリに任せているか
 
-M5 の差分テスト（docs/01 §6.5、`server/test/differential.test.ts`）で、`@simplewebauthn/server` 14.1.0 と自前の検証の判定を比べた結果。根拠はテストの実行結果と、ライブラリのソース（`verifyRegistrationResponse.js`・`verifyAuthenticationResponse.js`）。
+M5 の差分テスト（docs/01 §6.6、`server/test/differential.test.ts`）で、`@simplewebauthn/server` 14.1.0 と自前の検証の判定を比べた結果。根拠はテストの実行結果と、ライブラリのソース（`verifyRegistrationResponse.js`・`verifyAuthenticationResponse.js`）。
 
 - ライブラリは「渡された期待値と応答が合っているか」を見る。challenge が期限内か、使用済みでないか、どのブラウザに発行したものかは、アプリが `expectedChallenge` を用意する段階で決める。ライブラリに「その時点の正しい challenge」を渡し、使ったらすぐ消すのはアプリの仕事
 - ログインでは、credential ID で鍵を探すこと、その鍵の持ち主と `userHandle` が同じユーザーかを確かめること、返ってきた BE/BS を登録時の値と比べること（WebAuthn L3 §7.2、docs/01 L4）もアプリの仕事。ライブラリは渡された鍵で署名を検証するだけなので、攻撃者が自分の鍵で署名して被害者の `userHandle` を送っても受理する（L2）
