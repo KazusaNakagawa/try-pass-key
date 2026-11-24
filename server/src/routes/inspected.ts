@@ -4,12 +4,28 @@ import type { Config } from '../config.js';
 import { CheckError, type CheckId } from '../webauthn/checks/types.js';
 import { ParseError } from '../webauthn/errors.js';
 import { inspectCeremony, type InspectInput } from '../webauthn/inspect.js';
-import { AUTHENTICATION_CHECKS, REGISTRATION_CHECKS, runChecks } from '../webauthn/pipeline.js';
-import type { AuthenticationContext, RegistrationContext } from '../webauthn/checks/types.js';
+import {
+  AUTHENTICATION_CHECKS,
+  REGISTRATION_CHECKS,
+  runChecks,
+  STEPUP_CHECKS,
+} from '../webauthn/pipeline.js';
+import type {
+  AuthenticationContext,
+  RegistrationContext,
+  StepupContext,
+} from '../webauthn/checks/types.js';
 
 type Ceremony =
   | { ceremony: 'register'; ctx: RegistrationContext }
-  | { ceremony: 'login'; ctx: AuthenticationContext };
+  | { ceremony: 'login'; ctx: AuthenticationContext }
+  | { ceremony: 'stepup'; ctx: StepupContext };
+
+const CHECKS = {
+  register: REGISTRATION_CHECKS,
+  login: AUTHENTICATION_CHECKS,
+  stepup: STEPUP_CHECKS,
+} as const;
 
 /**
  * Runs the frozen pipeline for the ceremony, then `save`, exactly as before;
@@ -30,14 +46,15 @@ export function runInspected<T>(
     inspectCeremony({
       ceremony: input.ceremony,
       ctx: input.ctx,
-      checks: input.ceremony === 'register' ? REGISTRATION_CHECKS : AUTHENTICATION_CHECKS,
+      checks: CHECKS[input.ceremony],
       results,
       config: input.config,
       ...(failure === undefined ? {} : { failure }),
     } satisfies InspectInput);
   try {
-    if (input.ceremony === 'register') runChecks(input.ctx, REGISTRATION_CHECKS, record);
-    else runChecks(input.ctx, AUTHENTICATION_CHECKS, record);
+    if (input.ceremony === 'register') runChecks(input.ctx, CHECKS.register, record);
+    else if (input.ceremony === 'login') runChecks(input.ctx, CHECKS.login, record);
+    else runChecks(input.ctx, CHECKS.stepup, record);
     const saved = input.save();
     return { saved, inspection: input.config.inspection ? inspect() : undefined };
   } catch (err) {

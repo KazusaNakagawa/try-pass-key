@@ -102,6 +102,11 @@ export const STEPUP_CHECKS: readonly Check<StepupContext>[] = Object.freeze([
  */
 export const TRANSFER_GATE_CHECKS: readonly Check<TransferContext>[] = Object.freeze([S3, S2]);
 
+/** Runs the frozen transfer gate. The transfer route calls this, never runChecks with a list. */
+export function runTransferGate(ctx: TransferContext): void {
+  runChecks(ctx, TRANSFER_GATE_CHECKS);
+}
+
 /**
  * Runs every check in order and stops at the first that throws.
  * `onResult` only observes (for the inspection, M4): it is told 'pass' after a

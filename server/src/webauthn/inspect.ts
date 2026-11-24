@@ -7,11 +7,12 @@ import {
   type Check,
   type CheckId,
   type RegistrationContext,
+  type StepupContext,
 } from './checks/types.js';
 
 export interface InspectInput {
-  ceremony: 'register' | 'login';
-  ctx: RegistrationContext | AuthenticationContext;
+  ceremony: 'register' | 'login' | 'stepup';
+  ctx: RegistrationContext | AuthenticationContext | StepupContext;
   /** The pipeline that ran, in order. */
   checks: readonly Pick<Check<never>, 'id'>[];
   /** What runChecks reported. Checks missing here did not run. */
@@ -108,9 +109,9 @@ function readAuthenticatorData(input: InspectInput): CeremonyInspection['authent
   };
 }
 
-/** Only once L3 verified the signature, so naming a credential ID reveals nothing. */
+/** Login and step-up, only once L3 verified the signature, so naming a credential ID reveals nothing. */
 function readStoredCredential(input: InspectInput): CeremonyInspection['storedCredential'] {
-  if (input.ceremony !== 'login' || input.results.get('L3') !== 'pass') return undefined;
+  if (input.ceremony === 'register' || input.results.get('L3') !== 'pass') return undefined;
   const stored = tryRead(() => (input.ctx as AuthenticationContext).credential);
   if (!('value' in stored) || !stored.value) return undefined;
   const { signCount, backupEligible, backupState } = stored.value;
