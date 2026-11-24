@@ -11,7 +11,10 @@ const isTransport = (value: string): value is Transport =>
 
 /** POST /api/register/options request */
 export const RegisterOptionsRequest = z.object({
-  /** Stored on the authenticator and synced. Use a test name such as test-user-1. */
+  /**
+   * Passed to the authenticator, which may store it (1Password does) and sync it.
+   * Storing it is optional in the spec. Use a test name such as test-user-1.
+   */
   displayName: z.string().trim().min(1).max(64),
 });
 export type RegisterOptionsRequest = z.infer<typeof RegisterOptionsRequest>;
