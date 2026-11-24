@@ -54,6 +54,15 @@
 
 PoC では AAGUID と BE/BS を記録・表示する。実機では、1Password で登録した鍵が BE/BS = 1/1、AAGUID が 1Password の値だった（[worklog 2026-11-23](./worklog/2026-11-23.md)）。Touch ID は鍵を使うときの本人確認の手段で、鍵が同期するかは保存先で決まる。macOS の Chrome では保存先が Google パスワードマネージャー（同期・既定）、iCloud キーチェーン（同期）、Chrome プロファイル（同期しない）から選ばれる（[Google の対応環境一覧](https://developers.google.com/identity/passkeys/supported-environments)）。端末固定の鍵（Chrome プロファイル保存やセキュリティキー）とはまだ見比べていない。
 
+## 2.5 検証ライブラリは何を見て、何をアプリに任せているか
+
+M5 の差分テスト（docs/01 §6.5、`server/test/differential.test.ts`）で、`@simplewebauthn/server` 14.1.0 と自前の検証の判定を比べた結果。根拠はテストの実行結果と、ライブラリのソース（`verifyRegistrationResponse.js`・`verifyAuthenticationResponse.js`）。
+
+- ライブラリは「渡された期待値と応答が合っているか」を見る。challenge が期限内か、使用済みでないか、どのブラウザに発行したものかは、アプリが `expectedChallenge` を用意する段階で決める。ライブラリに「その時点の正しい challenge」を渡し、使ったらすぐ消すのはアプリの仕事
+- ログインでは、credential ID で鍵を探すこと、その鍵の持ち主と `userHandle` が同じユーザーかを確かめることもアプリの仕事。ライブラリは渡された鍵で署名を検証するだけなので、攻撃者が自分の鍵で署名して被害者の `userHandle` を送っても受理する（L2）
+- 応答だけで判定できるのにライブラリが受理したものもある。1023 バイトを超える credential ID（WebAuthn L3 §7.1 で RP が拒否する手順として挙がっている、docs/01 R4）、1024 ビットで e = 3 の RSA 鍵（docs/01 R5）、登録時は BE=0 だった鍵がログインで BE=1 を名乗る応答（WebAuthn L3 §7.2、docs/01 L4）、`crossOrigin: true` の応答（このPoC は iframe からの呼び出しを許さない方針、docs/01 C3）
+- ライブラリを使う場合も、これらはアプリ側で足す必要がある
+
 ## 3. パスキー以外の方式（別PoC候補）
 
 パスキーはログインを守る有力な手段だと考えているが、唯一の正解とは限らない。PoC の脅威モデル（01 の9章）で残るリスクの多くは、ログイン後のセッションや取引承認に関するもので、パスキーとは別の仕組みが効く。
