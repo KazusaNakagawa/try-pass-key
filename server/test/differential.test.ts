@@ -2,9 +2,19 @@
  * Differential test (M5): the valid responses and the docs/01 §6 attack
  * responses go through our pipeline and through @simplewebauthn/server, and
  * both verdicts are pinned. Where they differ, the row says why:
- *   - app:            the library compares what the app hands it; preparing
- *                     that value (a live challenge, a known credential) is the
- *                     app's job, which our pipeline does as a check.
+ *   - app:            the library compares what the app hands it, or returns
+ *                     data for the app to compare; preparing or comparing that
+ *                     value (a live challenge, a known credential, the stored
+ *                     BE) is the app's job, which our pipeline does as a check.
+ *                     The test cannot tell this from library_skips; that split
+ *                     is the row's own claim.
+ *
+ * The library gets the challenge that the response answers (the options it
+ * came from), as an app does that, like this server, finds the challenge by
+ * its value. The app rows for C2/C4/C5 therefore show what the library alone
+ * accepts when the app does not check expiry, use or browser binding itself;
+ * an app that keeps one challenge per session and drops it after use would
+ * hand the library another value (or none) and be rejected there.
  *   - library_skips:  the response alone shows the problem, and the library
  *                     does not judge it.
  *   - not_compared:   a normal app would not call the library at all.
@@ -75,8 +85,8 @@ async function libraryVerdict(
 
 /**
  * One registration attempt: our pipeline on the response, then the library on
- * the same JSON with what a normal app passes (the challenge it issued to this
- * browser, the configured origin and RP ID, the algorithms it offered).
+ * the same JSON with the challenge of the options the response answers, the
+ * configured origin and RP ID, and the algorithms those options offered.
  */
 async function compareRegistration(
   h: RegistrationHarness,
@@ -136,7 +146,7 @@ const registrationCases: Omit<Case, 'ceremony'>[] = [
     ours: 'C2',
     library: 'accept',
     category: 'app',
-    reason: 'the library compares the challenge it is given; expiry is the store of the app',
+    reason: 'the library does not know when a challenge was issued; expiry is the app job',
     run: () => {
       const h = new RegistrationHarness();
       const begun = h.begin();
@@ -168,7 +178,7 @@ const registrationCases: Omit<Case, 'ceremony'>[] = [
     ours: 'C2',
     library: 'accept',
     category: 'app',
-    reason: 'the library cannot know the challenge was used; consuming it is the app job',
+    reason: 'the library does not know the challenge was used; consuming it is the app job',
     run: () => {
       const h = new RegistrationHarness();
       const begun = h.begin();
@@ -184,7 +194,7 @@ const registrationCases: Omit<Case, 'ceremony'>[] = [
     ours: 'C5',
     library: 'accept',
     category: 'app',
-    reason: 'the app hands the library the challenge, so binding it to a browser is the app job',
+    reason: 'the library does not know which browser got the challenge; binding is the app job',
     run: () => {
       const h = new RegistrationHarness();
       const victim = h.begin();
@@ -260,7 +270,7 @@ const registrationCases: Omit<Case, 'ceremony'>[] = [
     ours: 'R4',
     library: 'accept',
     category: 'library_skips',
-    reason: 'the library does not limit the credential ID length (WebAuthn L3 §7.1 step 23)',
+    reason: 'the library does not limit the credential ID length (WebAuthn L3 §7.1)',
     run: registrationAttack({}, new SoftAuthenticator({ credentialIdLength: 1024 })),
   },
   {
@@ -281,9 +291,9 @@ const registrationCases: Omit<Case, 'ceremony'>[] = [
 
 /**
  * One login attempt: our pipeline on the response, then the library on the same
- * JSON with what a normal app passes: the challenge it issued to this browser,
- * and the stored credential the response's credential ID finds. When no
- * credential is found, a normal app stops there and never calls the library.
+ * JSON with the challenge of the options the response answers and the stored
+ * credential the response's credential ID finds. When no credential is found,
+ * the app has nothing to hand the library and rejects before calling it.
  */
 async function compareLogin(
   h: LoginHarness,
@@ -348,7 +358,7 @@ const loginCases: Omit<Case, 'ceremony'>[] = [
     ours: 'C2',
     library: 'accept',
     category: 'app',
-    reason: 'the library compares the challenge it is given; expiry is the store of the app',
+    reason: 'the library does not know when a challenge was issued; expiry is the app job',
     run: () => {
       const h = new LoginHarness();
       const user = h.register();
@@ -381,7 +391,7 @@ const loginCases: Omit<Case, 'ceremony'>[] = [
     ours: 'C2',
     library: 'accept',
     category: 'app',
-    reason: 'the library cannot know the challenge was used; consuming it is the app job',
+    reason: 'the library does not know the challenge was used; consuming it is the app job',
     run: () => {
       const h = new LoginHarness();
       const user = h.register();
@@ -399,7 +409,7 @@ const loginCases: Omit<Case, 'ceremony'>[] = [
     ours: 'C5',
     library: 'accept',
     category: 'app',
-    reason: 'the app hands the library the challenge, so binding it to a browser is the app job',
+    reason: 'the library does not know which browser got the challenge; binding is the app job',
     run: () => {
       const h = new LoginHarness();
       const user = h.register();
@@ -474,8 +484,8 @@ const loginCases: Omit<Case, 'ceremony'>[] = [
     name: 'a device-bound credential (BE=0) reports itself as synced (BE=1, BS=1)',
     ours: 'L4',
     library: 'accept',
-    category: 'library_skips',
-    reason: 'the library is not given the stored BE, so it cannot see it change',
+    category: 'app',
+    reason: 'the library returns the BE/BS flags; comparing them with the stored BE is the app job',
     run: () => {
       const h = new LoginHarness();
       const deviceBound = new SoftAuthenticator({ flags: { be: false, bs: false } });
