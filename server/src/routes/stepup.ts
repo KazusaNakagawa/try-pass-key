@@ -4,13 +4,14 @@ import { HttpError } from '../http/errors.js';
 import {
   currentSession,
   requireSession,
-  rotateSessionCookie,
+  sessionToken,
+  setSessionCookie,
   toMeResponse,
   type SessionDeps,
 } from '../session/http.js';
 import { getBalance } from '../users.js';
 import { transferTxHash } from '../transfer/tx-hash.js';
-import { buildStepupContext, createStepupOptions, saveStepup } from '../webauthn/stepup.js';
+import { approveStepup, buildStepupContext, createStepupOptions } from '../webauthn/stepup.js';
 import { runInspected } from './inspected.js';
 
 /** Re-authentication that approves one transfer (docs/01 §5.3). */
@@ -42,9 +43,11 @@ export function stepupRoutes(deps: SessionDeps): Router {
       ctx,
       config: deps.config,
       res,
-      save: () => saveStepup(deps, ctx),
+      // Counter and new session in one transaction (approveStepup).
+      save: () => approveStepup(deps, ctx, sessionToken(req)),
     });
-    const session = rotateSessionCookie(deps, req, res, { txHash: saved.txHash });
+    setSessionCookie(deps, res, saved.token);
+    const session = saved.session;
 
     const body: StepupVerifyResponse = {
       me: toMeResponse(deps.db, session),

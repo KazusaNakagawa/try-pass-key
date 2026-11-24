@@ -9,7 +9,6 @@ import {
   createSession,
   destroySession,
   loadSession,
-  rotateSession,
   SESSION_ABSOLUTE_MS,
   type Session,
 } from './sessions.js';
@@ -52,21 +51,16 @@ export function startSession(
   return session;
 }
 
-/**
- * Step-up succeeded: swap the session for a new ID that carries the approval
- * (docs/01 §8). The old cookie stops working.
- */
-export function rotateSessionCookie(
-  deps: SessionDeps,
-  req: Request,
-  res: Response,
-  approval: { txHash: string },
-): Session {
+/** The token of the session cookie sent with the request (requireSession checked it). */
+export function sessionToken(req: Request): string {
   const token = readCookie(req, SESSION_COOKIE);
-  const rotated = token ? rotateSession(deps.db, token, deps.now(), approval) : undefined;
-  if (!rotated) throw new HttpError(401, 'unauthenticated', 'login required');
-  res.cookie(SESSION_COOKIE, rotated.token, sessionCookieOptions(deps.config));
-  return rotated.session;
+  if (!token) throw new Error('requireSession middleware is missing');
+  return token;
+}
+
+/** Points the browser at a session that replaced its previous one (step-up). */
+export function setSessionCookie(deps: SessionDeps, res: Response, token: string): void {
+  res.cookie(SESSION_COOKIE, token, sessionCookieOptions(deps.config));
 }
 
 export function endSession(deps: SessionDeps, req: Request, res: Response): void {

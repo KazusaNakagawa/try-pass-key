@@ -4,6 +4,9 @@ import {
   recordAssertion,
   type AuthenticationDeps,
 } from './authentication.js';
+import { inTransaction } from '../db.js';
+import { HttpError } from '../http/errors.js';
+import { rotateSession, type Session } from '../session/sessions.js';
 import { toBase64Url } from './bytes.js';
 import { issueChallenge } from './challenges.js';
 import type { StepupContext } from './checks/types.js';
@@ -65,4 +68,27 @@ export function saveStepup(
     throw new Error('step-up challenge has no transaction');
   }
   return { credential: recordAssertion(deps, ctx), txHash };
+}
+
+/**
+ * After every check passed: records the counter and moves the session to a new
+ * ID carrying the approval (docs/01 §8). Answers 401 if the session is gone.
+ * One transaction: if the session cannot be moved, the counter is not recorded
+ * either, so a failure never leaves a used signature without an approval.
+ */
+export function approveStepup(
+  deps: AuthenticationDeps,
+  ctx: StepupContext,
+  oldToken: string,
+): {
+  credential: { id: string; signCount: number; backupState: boolean };
+  token: string;
+  session: Session;
+} {
+  return inTransaction(deps.db, () => {
+    const { credential, txHash } = saveStepup(deps, ctx);
+    const rotated = rotateSession(deps.db, oldToken, deps.now(), { txHash });
+    if (!rotated) throw new HttpError(401, 'unauthenticated', 'login required');
+    return { credential, ...rotated };
+  });
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { TransferRecord, TransferRequest } from '@app/shared';
+import { inTransaction } from '../db.js';
 import { HttpError } from '../http/errors.js';
 import { getBalance } from '../users.js';
 import type { TransferApproval, TransferContext } from '../webauthn/checks/types.js';
@@ -62,8 +63,7 @@ export function executeTransfer(
     amount: input.tx.amount,
     createdAt: deps.now().toISOString(),
   };
-  db.exec('BEGIN');
-  try {
+  inTransaction(db, () => {
     const debited = db
       .prepare('UPDATE users SET balance = balance - ? WHERE id = ? AND balance >= ?')
       .run(transfer.amount, input.userId, transfer.amount);
@@ -73,11 +73,7 @@ export function executeTransfer(
     db.prepare(
       'INSERT INTO transfers (id, user_id, to_account, amount, created_at) VALUES (?, ?, ?, ?, ?)',
     ).run(transfer.id, input.userId, transfer.to, transfer.amount, transfer.createdAt);
-    db.exec('COMMIT');
-  } catch (err) {
-    db.exec('ROLLBACK');
-    throw err;
-  }
+  });
   return { transfer, balance: getBalance(db, input.userId) };
 }
 

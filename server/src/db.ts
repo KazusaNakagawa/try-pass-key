@@ -129,3 +129,23 @@ export function listTables(db: DatabaseSync): string[] {
     .all() as { name: string }[];
   return rows.map((r) => r.name);
 }
+
+let savepoints = 0;
+
+/**
+ * Runs fn atomically: everything it wrote is rolled back if it throws. Uses a
+ * SAVEPOINT, so it nests inside another call (or an open transaction).
+ */
+export function inTransaction<T>(db: DatabaseSync, fn: () => T): T {
+  const name = `sp_${++savepoints}`;
+  db.exec(`SAVEPOINT ${name}`);
+  try {
+    const result = fn();
+    db.exec(`RELEASE ${name}`);
+    return result;
+  } catch (err) {
+    db.exec(`ROLLBACK TO ${name}`);
+    db.exec(`RELEASE ${name}`);
+    throw err;
+  }
+}

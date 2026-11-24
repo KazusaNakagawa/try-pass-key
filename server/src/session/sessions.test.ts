@@ -92,6 +92,16 @@ describe('sessions', () => {
       expect(row.approved_tx_hash).toBe('tx-1');
     });
 
+    it('keeps the old session when the new one cannot be written', () => {
+      const { db, t0 } = setup();
+      const { token } = createSession(db, USER, t0);
+      db.exec(
+        "CREATE TRIGGER fail_insert BEFORE INSERT ON sessions BEGIN SELECT RAISE(ABORT, 'disk full'); END",
+      );
+      expect(() => rotateSession(db, token, t0, { txHash: 'tx-1' })).toThrow('disk full');
+      expect(loadSession(db, token, t0)).toBeDefined();
+    });
+
     it('returns undefined when the old session is gone', () => {
       const { db, t0 } = setup();
       expect(rotateSession(db, 'no-such-token', t0, { txHash: 'tx-1' })).toBeUndefined();
