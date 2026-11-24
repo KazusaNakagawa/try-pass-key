@@ -142,3 +142,27 @@ test('transfer: the step-up shows in the inspector even if the transfer then fai
   await expect(page.locator('#transfer-result')).toContainText('送金できませんでした');
   await expect(page.locator('#inspector')).toContainText('ステップアップ（受理）');
 });
+
+test('a failed login message does not linger after registering', async ({ page }) => {
+  await addVirtualAuthenticator(page);
+  await register(page, 'test-user-e2e-6');
+  // Every login is rejected, as for a passkey left over from a deleted database.
+  await page.route('**/api/login/verify', (route) =>
+    route.fulfill({
+      status: 400,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        error: 'unknown_credential',
+        detail: 'L1: unknown credential',
+        check: 'L1',
+      }),
+    }),
+  );
+  await page.locator('#logout').click();
+  await expect(page.locator('#login-result')).toContainText('ログインできませんでした');
+
+  await page.locator('#display-name').fill('test-user-e2e-7');
+  await page.locator('#register-form button[type=submit]').click();
+  await expect(page.locator('#me')).toContainText('ログイン中: test-user-e2e-7');
+  await expect(page.locator('#login-result')).toBeHidden();
+});

@@ -130,6 +130,9 @@ ui.registerForm.addEventListener('submit', (event) => {
   cancelConditionalUI()
     .then(() => registerPasskey(ui.displayName.value))
     .then(async (result) => {
+      // Now logged in: an earlier failed login (e.g. with a passkey left over from
+      // a deleted database) is no longer the state of the page.
+      ui.loginResult.textContent = '';
       ui.registerResult.textContent = `登録しました\n${JSON.stringify(result, null, 2)}`;
       showInspection(ui.inspector, result.inspection);
       await refreshMe();
