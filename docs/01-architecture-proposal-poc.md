@@ -288,9 +288,9 @@ sequenceDiagram
 
 - **取引ハッシュ**: `base64url(SHA-256(JSON.stringify({ kind: 'transfer', to, amount })))`。キーはこの順で組み立て直すので、リクエスト本文の書き方に左右されない。`kind` は、M7 のパスキー削除を同じ仕組みで承認したときに、別の種類の操作の承認として流用されないようにするため（`server/src/transfer/tx-hash.ts`）
 - **紐づけ方**: challenge は乱数のまま。options で取引ハッシュを challenge の行（`tx_hash`）に保存し、verify が通ったらセッションの `approved_tx_hash` に写す。challenge に取引を埋め込んでも、認証器が取引を表示しない以上、利用者が何に署名したかの保証は増えない（D37）
-- **検証**: verify は `STEPUP_CHECKS` を通す。ログインの検証から L2 を外し、S1（鍵の持ち主がセッションのユーザー）を入れたもの。`allowCredentials` を指定した認証では `userHandle` が返らないことがあり（WebAuthn L3 §5.2.2）、`userHandle` を必須にする L2 では正当な承認が拒否されうる。C5 は一時 Cookie ではなく、行の `user_id` とセッションのユーザーの一致で縛る
-- **セッションIDの再発行**: verify が通ったら、古いセッションを消して新しいIDを発行し、そこに `stepup_at` と `approved_tx_hash` を記録する。`auth_at` と絶対期限は引き継ぐ（ステップアップで延びない）
-- **送金のゲート**: `/api/transfer` は本文を検証してから `TRANSFER_GATE_CHECKS`（S3 → S2）を通す。S3 が承認を先に消費するので、S2 で拒否される送金でも承認は使い切りになる。消費は「読んだ値と一致するときだけ消す」条件付き UPDATE で行い、同じ承認で同時に来た2つの送金は片方しか通らない（D38）。残高不足でも承認は戻さない。`/api/stepup/options` が先に残高を確かめるので、普通は起きない
+- **検証**: verify は `STEPUP_CHECKS` を通す。ログインの検証から L2 を外し、S1（鍵の持ち主がセッションのユーザー）を入れたもの。`allowCredentials` を指定した認証では `userHandle` が返らないことがあり（WebAuthn L3 §5.2.2）、`userHandle` を必須にする L2 では正当な承認が拒否されうる。C5 は一時 Cookie ではなく、行の `session_id` と、応答を送ってきたセッションの ID（トークンのハッシュ）の一致で縛る。ユーザーの一致で縛ると、漏れた応答を同じユーザーの別セッション（盗まれた Cookie）で使えてしまう（D40）
+- **セッションIDの再発行**: verify が通ったら、古いセッションを消して新しいIDを発行し、そこに `stepup_at` と `approved_tx_hash` を記録する。`auth_at` と絶対期限は引き継ぐ（ステップアップで延びない）。signCount の記録とセッションの作り直しは1つのトランザクションで行い、途中で失敗したらどちらも残らない
+- **送金のゲート**: `/api/transfer` は本文を検証し、セッションの承認を読み込んでから `TRANSFER_GATE_CHECKS`（S3 → S2）を通す。S2 は読み込んだ承認と比べるので、S3 に依存しない。S3 が承認を先に消費するので、S2 で拒否される送金でも承認は使い切りになる。消費は「読んだ値と一致するときだけ消す」条件付き UPDATE で行い、同じ承認で同時に来た2つの送金は片方しか通らない（D38）。残高不足でも承認は戻さない。`/api/stepup/options` が先に残高を確かめるので、普通は起きない
 
 ## 6. サーバー側の検証項目
 
@@ -323,7 +323,7 @@ export function runChecks(ctx: CeremonyContext, checks: readonly Check[]) { /* �
 | C2 | `challenge` がサーバー発行の未使用・期限内の値と一致 | リプレイ攻撃（過去の署名の再送） |
 | C3 | `origin` が許可 origin（`RP_ORIGIN`）と完全一致し、`crossOrigin` が true でない | フィッシングサイト経由の応答、他サイトの iframe から呼ばせた応答を受理 |
 | C4 | challenge を、他のどの検査よりも、また attestationObject のデコードよりも先に削除する（検証の成否にかかわらず使い捨て）。同時に2つのリクエストが行を見つけた場合は、削除できた方だけが続行する | 同じ challenge での二重登録・二重ログイン、壊れた応答を送って challenge を使い回すこと |
-| C5 | challenge が要求元のブラウザに発行されたもの（challenge の値で引いた行の ID が一時 Cookie `ceremony` の値と一致。ステップアップでは行の `user_id` がセッションのユーザーと一致） | 漏れた署名済み応答（XSS での窃取、ログへの混入など）を、攻撃者が別のブラウザから送って受理される |
+| C5 | challenge が要求元のブラウザに発行されたもの（challenge の値で引いた行の ID が一時 Cookie `ceremony` の値と一致。ステップアップでは行の `session_id` が、応答を送ってきたセッションの ID と一致。D40） | 漏れた署名済み応答（XSS での窃取、ログへの混入など）を、攻撃者が別のブラウザから送って受理される |
 
 ### 6.2 authenticatorData
 
@@ -440,6 +440,7 @@ erDiagram
     text display_name "register時のみ"
     text user_id "stepup時のみ"
     text tx_hash "stepup時の取引ハッシュ"
+    text session_id "stepup時のみ。要求したセッションのID(トークンのハッシュ)"
     text expires_at
   }
   sessions {
@@ -466,7 +467,7 @@ challenge は登録・認証前のためユーザーと紐づかないことが�
 
 - Cookie: `ceremony=<行ID>; HttpOnly; SameSite=Strict; Path=/api; Max-Age=300`（HTTPS 時は `Secure`）
 - verify: `SELECT * FROM challenges WHERE challenge = ?` で行を引き（`challenge` 列は UNIQUE）、C2 で用途と期限、C4 で `DELETE FROM challenges WHERE id = ? RETURNING id` による消費、C5 で Cookie との一致を確かめる
-- ステップアップはログイン中なので一時 Cookie を使わず、行の `user_id` とセッションのユーザーの一致で縛る
+- ステップアップはログイン中なので一時 Cookie を使わず、行の `session_id` と、応答を送ってきたセッションの ID の一致で縛る（D40。当初の D14 はユーザーの一致だった）
 - 判断の経緯は decisions の D14、D21
 
 登録の options から verify までの一時状態（`user_handle`、`display_name`）も challenge の行に持たせる。`users` の行は verify が成功したときに初めて作るので、途中で離脱しても未完成のユーザーが残らない。
