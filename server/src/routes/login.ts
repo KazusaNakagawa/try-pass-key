@@ -42,6 +42,7 @@ export function loginRoutes(deps: SessionDeps): Router {
         displayName: user.displayName,
         authAt: session.authAt,
         stepupAt: session.stepupAt,
+        balance: session.balance,
       },
       credential,
       ...(inspection ? { inspection } : {}),

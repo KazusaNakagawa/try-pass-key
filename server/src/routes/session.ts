@@ -12,6 +12,7 @@ export function sessionRoutes(deps: SessionDeps): Router {
       displayName: session.displayName,
       authAt: session.authAt,
       stepupAt: session.stepupAt,
+      balance: session.balance,
     };
     res.json(body);
   });

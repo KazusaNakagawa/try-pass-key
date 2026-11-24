@@ -13,6 +13,8 @@ export interface Session {
   authAt: string;
   stepupAt: string | null;
   expiresAt: string;
+  /** The user's mock balance when the session was loaded (M6). */
+  balance: number;
 }
 
 interface SessionRow {
@@ -20,6 +22,8 @@ interface SessionRow {
   user_id: string;
   /** NULL when the user row is gone (e.g. deleted without foreign keys enabled). */
   display_name: string | null;
+  /** NULL together with display_name when the user row is gone. */
+  balance: number | null;
   auth_at: string;
   last_seen_at: string;
   stepup_at: string | null;
@@ -37,6 +41,9 @@ export function createSession(
   now: Date,
 ): { token: string; session: Session } {
   const token = randomBytes(32).toString('base64url');
+  const { balance } = db.prepare('SELECT balance FROM users WHERE id = ?').get(user.id) as {
+    balance: number;
+  };
   const session: Session = {
     id: hashToken(token),
     userId: user.id,
@@ -44,6 +51,7 @@ export function createSession(
     authAt: now.toISOString(),
     stepupAt: null,
     expiresAt: new Date(now.getTime() + SESSION_ABSOLUTE_MS).toISOString(),
+    balance,
   };
   db.prepare(
     `INSERT INTO sessions (id, user_id, auth_at, last_seen_at, expires_at)
@@ -60,14 +68,14 @@ export function loadSession(db: DatabaseSync, token: string, now: Date): Session
   const id = hashToken(token);
   const row = db
     .prepare(
-      `SELECT s.*, u.display_name FROM sessions s
+      `SELECT s.*, u.display_name, u.balance FROM sessions s
        LEFT JOIN users u ON u.id = s.user_id WHERE s.id = ?`,
     )
     .get(id) as SessionRow | undefined;
   if (!row) return undefined;
   const idleExpired = new Date(row.last_seen_at).getTime() + SESSION_IDLE_MS <= now.getTime();
   const absoluteExpired = new Date(row.expires_at) <= now;
-  if (idleExpired || absoluteExpired || row.display_name === null) {
+  if (idleExpired || absoluteExpired || row.display_name === null || row.balance === null) {
     db.prepare('DELETE FROM sessions WHERE id = ?').run(id);
     return undefined;
   }
@@ -79,6 +87,7 @@ export function loadSession(db: DatabaseSync, token: string, now: Date): Session
     authAt: row.auth_at,
     stepupAt: row.stepup_at,
     expiresAt: row.expires_at,
+    balance: row.balance,
   };
 }
 
