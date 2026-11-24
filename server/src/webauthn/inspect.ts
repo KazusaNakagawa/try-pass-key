@@ -36,28 +36,20 @@ function tryRead<T>(read: () => T): { value: T } | { error: string } {
  * Builds the inspection of one ceremony (M4). Call it only after the checks ran:
  * reading authData decodes it lazily, and C4 must consume the challenge first.
  * Never throws; whatever cannot be decoded is reported as an error string.
+ *
+ * It reads only what the pipeline itself got to: authData once C2 accepted the
+ * challenge (so a stray request costs no decode), and the stored credential only
+ * once L3 verified the signature (so naming a credential ID reveals nothing).
  */
 export function inspectCeremony(input: InspectInput): CeremonyInspection {
-  const { ctx } = input;
-  const authData = tryRead(() => ctx.authData);
-  const attested =
-    input.ceremony === 'register'
-      ? tryRead(() => (ctx as RegistrationContext).attestedCredentialData)
-      : undefined;
-  const stored =
-    input.ceremony === 'login'
-      ? tryRead(() => (ctx as AuthenticationContext).credential)
-      : undefined;
-
-  const failedCheck = input.checks.find((c) => input.results.get(c.id) === 'fail')?.id;
-  const failure =
-    input.failure === undefined
-      ? undefined
-      : {
-          check: input.failure instanceof CheckError ? input.failure.check : failedCheck,
-          kind: input.failure instanceof CheckError ? ('check' as const) : ('malformed' as const),
-          message: message(input.failure),
-        };
+  const { ctx, results } = input;
+  const failure = describeFailure(input);
+  // A check can also reject after the pipeline (A4 while saving a concurrent
+  // login); its row must then read fail, not pass.
+  const resultOf = (id: CheckId): CheckResult =>
+    failure?.kind === 'check' && failure.check === id ? 'fail' : (results.get(id) ?? 'not_run');
+  const authenticatorData = readAuthenticatorData(input);
+  const storedCredential = readStoredCredential(input);
 
   return {
     ceremony: input.ceremony,
@@ -74,33 +66,53 @@ export function inspectCeremony(input: InspectInput): CeremonyInspection {
       origin: ctx.clientData.origin,
       crossOrigin: ctx.clientData.crossOrigin,
     },
-    authenticatorData:
-      'error' in authData
-        ? { error: authData.error }
-        : {
-            rpIdHash: authData.value.rpIdHash.toString('hex'),
-            flags: { ...authData.value.flags },
-            signCount: authData.value.signCount,
-            ...(attested && 'value' in attested
-              ? {
-                  aaguid: attested.value.aaguid.toString('hex'),
-                  credentialId: toBase64Url(attested.value.credentialId),
-                }
-              : {}),
-          },
-    ...(stored && 'value' in stored && stored.value
-      ? {
-          storedCredential: {
-            signCount: stored.value.signCount,
-            backupEligible: stored.value.backupEligible,
-            backupState: stored.value.backupState,
-          },
-        }
-      : {}),
-    checks: input.checks.map((c) => ({
-      id: c.id,
-      result: (input.results.get(c.id) ?? 'not_run') satisfies CheckResult,
-    })),
+    ...(authenticatorData ? { authenticatorData } : {}),
+    ...(storedCredential ? { storedCredential } : {}),
+    checks: input.checks.map((c) => ({ id: c.id, result: resultOf(c.id) })),
     ...(failure ? { failure } : {}),
   };
+}
+
+function describeFailure(input: InspectInput): CeremonyInspection['failure'] {
+  const err = input.failure;
+  if (err === undefined) return undefined;
+  if (err instanceof CheckError) return { check: err.check, kind: 'check', message: message(err) };
+  // A decode error surfaces inside the first check that reads the data.
+  const running = input.checks.find((c) => input.results.get(c.id) === 'fail')?.id;
+  return { ...(running ? { check: running } : {}), kind: 'malformed', message: message(err) };
+}
+
+/**
+ * Decoded once, and only after C2 accepted the challenge: a failing lazy decode
+ * is not cached by the context, so every further read would parse again.
+ */
+function readAuthenticatorData(input: InspectInput): CeremonyInspection['authenticatorData'] {
+  if (input.results.get('C2') !== 'pass') return undefined;
+  const { ctx } = input;
+  const authData = tryRead(() => ctx.authData);
+  if ('error' in authData) return { error: authData.error };
+  const attested =
+    input.ceremony === 'register'
+      ? tryRead(() => (ctx as RegistrationContext).attestedCredentialData)
+      : undefined;
+  return {
+    rpIdHash: authData.value.rpIdHash.toString('hex'),
+    flags: { ...authData.value.flags },
+    signCount: authData.value.signCount,
+    ...(attested && 'value' in attested
+      ? {
+          aaguid: attested.value.aaguid.toString('hex'),
+          credentialId: toBase64Url(attested.value.credentialId),
+        }
+      : {}),
+  };
+}
+
+/** Only once L3 verified the signature, so naming a credential ID reveals nothing. */
+function readStoredCredential(input: InspectInput): CeremonyInspection['storedCredential'] {
+  if (input.ceremony !== 'login' || input.results.get('L3') !== 'pass') return undefined;
+  const stored = tryRead(() => (input.ctx as AuthenticationContext).credential);
+  if (!('value' in stored) || !stored.value) return undefined;
+  const { signCount, backupEligible, backupState } = stored.value;
+  return { signCount, backupEligible, backupState };
 }

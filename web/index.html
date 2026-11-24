@@ -49,11 +49,12 @@
         <pre id="register-result" aria-live="polite"></pre>
       </section>
 
-      <section id="inspector-section">
+      <!-- Shown once a verify response carries an inspection (server INSPECTION=on). -->
+      <section id="inspector-section" hidden>
         <h2>直近の ceremony</h2>
         <p>
           登録・ログインでブラウザと認証器が送った値、サーバーの期待値、検証項目（docs/01
-          §6）の結果。開発時だけ表示されます。
+          §6）の結果。サーバーで INSPECTION=on のときだけ表示されます。
         </p>
         <div id="inspector" aria-live="polite">まだありません</div>
       </section>

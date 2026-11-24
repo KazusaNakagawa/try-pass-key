@@ -1,35 +1,49 @@
 import type { Response } from 'express';
 import type { CeremonyInspection } from '@app/shared';
 import type { Config } from '../config.js';
-import type { Check, CheckId } from '../webauthn/checks/types.js';
+import { CheckError, type CheckId } from '../webauthn/checks/types.js';
+import { ParseError } from '../webauthn/errors.js';
 import { inspectCeremony, type InspectInput } from '../webauthn/inspect.js';
-import { runChecks } from '../webauthn/pipeline.js';
+import { AUTHENTICATION_CHECKS, REGISTRATION_CHECKS, runChecks } from '../webauthn/pipeline.js';
+import type { AuthenticationContext, RegistrationContext } from '../webauthn/checks/types.js';
+
+type Ceremony =
+  | { ceremony: 'register'; ctx: RegistrationContext }
+  | { ceremony: 'login'; ctx: AuthenticationContext };
 
 /**
- * Runs the checks, then `save`, exactly as before; additionally records what
- * happened for the inspection (M4). On success it returns the inspection to put
- * in the body; on failure it leaves it on res.locals.inspection, where the error
- * handler picks it up, and rethrows. In production
- * no inspection is built.
+ * Runs the frozen pipeline for the ceremony, then `save`, exactly as before;
+ * additionally records what happened for the inspection (M4). The caller names
+ * the ceremony, never a list of checks, so a route cannot pass a filtered one.
+ *
+ * On success it returns the inspection to put in the body; on a check or parse
+ * failure it leaves it on res.locals.inspection, where the error handler picks
+ * it up, and rethrows. Other errors become a 500 without a body to carry it, so
+ * no inspection is built. Nothing is built unless config.inspection is on.
  */
-export function runInspected<Ctx extends InspectInput['ctx'], T>(input: {
-  ceremony: InspectInput['ceremony'];
-  ctx: Ctx;
-  checks: readonly Check<Ctx>[];
-  config: Config;
-  res: Response;
-  save: () => T;
-}): { saved: T; inspection: CeremonyInspection | undefined } {
+export function runInspected<T>(
+  input: Ceremony & { config: Config; res: Response; save: () => T },
+): { saved: T; inspection: CeremonyInspection | undefined } {
   const results = new Map<CheckId, 'pass' | 'fail'>();
-  const enabled = input.config.nodeEnv !== 'production';
+  const record = (id: CheckId, result: 'pass' | 'fail') => results.set(id, result);
   const inspect = (failure?: unknown) =>
-    inspectCeremony({ ...input, results, ...(failure === undefined ? {} : { failure }) });
+    inspectCeremony({
+      ceremony: input.ceremony,
+      ctx: input.ctx,
+      checks: input.ceremony === 'register' ? REGISTRATION_CHECKS : AUTHENTICATION_CHECKS,
+      results,
+      config: input.config,
+      ...(failure === undefined ? {} : { failure }),
+    } satisfies InspectInput);
   try {
-    runChecks(input.ctx, input.checks, (id, result) => results.set(id, result));
+    if (input.ceremony === 'register') runChecks(input.ctx, REGISTRATION_CHECKS, record);
+    else runChecks(input.ctx, AUTHENTICATION_CHECKS, record);
     const saved = input.save();
-    return { saved, inspection: enabled ? inspect() : undefined };
+    return { saved, inspection: input.config.inspection ? inspect() : undefined };
   } catch (err) {
-    if (enabled) input.res.locals.inspection = inspect(err);
+    if (input.config.inspection && (err instanceof CheckError || err instanceof ParseError)) {
+      input.res.locals.inspection = inspect(err);
+    }
     throw err;
   }
 }

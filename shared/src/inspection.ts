@@ -26,28 +26,34 @@ export const CeremonyInspection = z.object({
     origin: z.string(),
     crossOrigin: z.boolean(),
   }),
-  authenticatorData: z.union([
-    z.object({
-      /** hex */
-      rpIdHash: z.string(),
-      flags: z.object({
-        up: z.boolean(),
-        uv: z.boolean(),
-        be: z.boolean(),
-        bs: z.boolean(),
-        at: z.boolean(),
-        ed: z.boolean(),
+  /** Absent when the checks stopped before C2 (an unknown challenge): nothing was decoded. */
+  authenticatorData: z
+    .union([
+      z.object({
+        /** hex */
+        rpIdHash: z.string(),
+        flags: z.object({
+          up: z.boolean(),
+          uv: z.boolean(),
+          be: z.boolean(),
+          bs: z.boolean(),
+          at: z.boolean(),
+          ed: z.boolean(),
+        }),
+        signCount: z.number(),
+        /** Registration only. */
+        aaguid: z.string().optional(),
+        /** Registration only, base64url. */
+        credentialId: z.string().optional(),
       }),
-      signCount: z.number(),
-      /** Registration only. */
-      aaguid: z.string().optional(),
-      /** Registration only, base64url. */
-      credentialId: z.string().optional(),
-    }),
-    /** authenticatorData (or the attestation object) could not be decoded. */
-    z.object({ error: z.string() }),
-  ]),
-  /** Login only: the stored credential the response named, before this login updated it. */
+      /** authenticatorData (or the attestation object) could not be decoded. */
+      z.object({ error: z.string() }),
+    ])
+    .optional(),
+  /**
+   * Login only, and only once the signature verified (L3): the stored credential,
+   * before this login updated it.
+   */
   storedCredential: z
     .object({ signCount: z.number(), backupEligible: z.boolean(), backupState: z.boolean() })
     .optional(),
@@ -64,3 +70,10 @@ export const CeremonyInspection = z.object({
     .optional(),
 });
 export type CeremonyInspection = z.infer<typeof CeremonyInspection>;
+
+/**
+ * The inspection field of a verify or error body. A value that does not parse is
+ * dropped instead of failing the whole body: the inspection is a debugging aid,
+ * and the session cookie or the failed check ID must still reach the page.
+ */
+export const OptionalInspection = CeremonyInspection.optional().catch(undefined);

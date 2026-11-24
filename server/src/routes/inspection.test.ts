@@ -1,4 +1,5 @@
-import { randomBytes } from 'node:crypto';
+import { generateKeyPairSync, randomBytes } from 'node:crypto';
+import type { Response } from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   ApiError,
@@ -9,24 +10,29 @@ import {
   type CeremonyInspection,
 } from '@app/shared';
 import { loadConfig } from '../config.js';
-import { TEST_CONFIG } from '../../test/registration-harness.js';
+import { RegistrationHarness, TEST_CONFIG } from '../../test/registration-harness.js';
 import { SoftAuthenticator, type AssertionOverrides } from '../../test/soft-authenticator.js';
 import { Browser, startTestServer } from '../../test/test-server.js';
 import { CheckError, type RegistrationContext } from '../webauthn/checks/types.js';
 import { ParseError } from '../webauthn/errors.js';
 import { inspectCeremony } from '../webauthn/inspect.js';
+import { runInspected } from './inspected.js';
 import { AUTHENTICATION_CHECKS, REGISTRATION_CHECKS } from '../webauthn/pipeline.js';
 
 type Server = Awaited<ReturnType<typeof startTestServer>>;
 let dev: Server;
 let prod: Server;
+let off: Server;
 beforeAll(async () => {
   dev = await startTestServer();
   prod = await startTestServer(loadConfig({ NODE_ENV: 'production' }));
+  // Development without INSPECTION=on: off by default.
+  off = await startTestServer(loadConfig({ NODE_ENV: 'development' }));
 });
 afterAll(() => {
   dev.close();
   prod.close();
+  off.close();
 });
 
 async function register(server: Server) {
@@ -134,6 +140,25 @@ describe('inspection on verify responses (development)', () => {
     expect(resultOf(inspection, 'L1')).toBe('fail');
     expect(inspection?.storedCredential).toBeUndefined();
   });
+
+  it('does not reveal the stored credential when the signature is forged (L3)', async () => {
+    const user = await register(dev);
+    const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const res = await login(dev, user, { signWith: privateKey });
+    const { check, inspection } = ApiError.parse(await res.json());
+    expect(check).toBe('L3');
+    expect(resultOf(inspection, 'L1')).toBe('pass');
+    expect(inspection?.storedCredential).toBeUndefined();
+  });
+
+  it('does not decode authenticatorData for an unknown challenge (C2)', async () => {
+    const user = await register(dev);
+    const res = await login(dev, user, { challenge: randomBytes(32).toString('base64url') });
+    const { check, inspection } = ApiError.parse(await res.json());
+    expect(check).toBe('C2');
+    expect(inspection?.authenticatorData).toBeUndefined();
+    expect(inspection?.storedCredential).toBeUndefined();
+  });
 });
 
 describe('inspection of a malformed response', () => {
@@ -158,6 +183,15 @@ describe('inspection of a malformed response', () => {
     expect(body.inspection?.authenticatorData).toHaveProperty('error');
     expect(resultOf(body.inspection, 'C4')).toBe('pass');
     expect(body.inspection?.failure).toMatchObject({ check: 'A1', kind: 'malformed' });
+  });
+});
+
+describe('inspection off by default', () => {
+  it('is omitted in development unless INSPECTION=on', async () => {
+    const user = await register(off);
+    expect(user.body).not.toHaveProperty('inspection');
+    const rejected = await login(off, user, { origin: 'https://evil.example' });
+    expect(await rejected.json()).not.toHaveProperty('inspection');
   });
 });
 
@@ -246,5 +280,59 @@ describe('inspectCeremony', () => {
       failure,
     });
     expect(inspection.failure).toEqual({ check: 'A4', kind: 'check', message: failure.message });
+    // The check row must not say A4 passed while the heading says A4 rejected it.
+    expect(resultOf(inspection, 'A4')).toBe('fail');
+  });
+
+  it('decodes a failing authData once and skips the reads that depend on it', () => {
+    let reads = 0;
+    inspectCeremony({
+      ceremony: 'register',
+      ctx: fakeContext(() => {
+        reads += 1;
+        throw new ParseError('attestationObject is not CBOR');
+      }),
+      checks: REGISTRATION_CHECKS,
+      results: new Map([
+        ['C4', 'pass'],
+        ['C2', 'pass'],
+        ['A1', 'fail'],
+      ]),
+      config: TEST_CONFIG,
+      failure: new ParseError('attestationObject is not CBOR'),
+    });
+    expect(reads).toBe(1);
+  });
+});
+
+describe('runInspected', () => {
+  it('builds no inspection for an error that is neither a check nor a parse error', () => {
+    const res = { locals: {} } as unknown as Response;
+    const ctx = new RegistrationHarness().validContext();
+    expect(() =>
+      runInspected({
+        ceremony: 'register',
+        ctx,
+        config: TEST_CONFIG,
+        res,
+        save: () => {
+          throw new Error('database is locked');
+        },
+      }),
+    ).toThrow('database is locked');
+    expect(res.locals.inspection).toBeUndefined();
+  });
+});
+
+describe('verify response schemas', () => {
+  it('keep the rest of an error body when the inspection does not parse', () => {
+    const body = ApiError.parse({
+      error: 'check_failed',
+      detail: 'origin is not allowed',
+      check: 'C3',
+      inspection: { unexpected: true },
+    });
+    expect(body.check).toBe('C3');
+    expect(body.inspection).toBeUndefined();
   });
 });

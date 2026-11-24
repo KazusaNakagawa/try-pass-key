@@ -7,8 +7,18 @@ import type { CeremonyInspection } from '@app/shared';
  * DOM is built with textContent only.
  */
 export function showInspection(target: HTMLElement, inspection: CeremonyInspection | undefined) {
-  // Nothing reached the server's checks (cancelled, network error): keep the last one.
-  if (!inspection) return;
+  const section = target.closest('section');
+  if (!inspection) {
+    // The latest attempt never reached the checks (cancelled, malformed request,
+    // network error). Do not leave an older ceremony looking like the latest one.
+    if (section && !section.hidden) {
+      target.replaceChildren(
+        el('p', '直前の操作はサーバーの検証まで届かなかったため、表示する内容がありません。'),
+      );
+    }
+    return;
+  }
+  if (section) section.hidden = false;
   target.replaceChildren(
     heading(inspection),
     checkRow(inspection),
@@ -46,13 +56,14 @@ function checkRow(i: CeremonyInspection): HTMLElement {
   return row;
 }
 
+const NOT_DECODED = '（C2 より前で止まったため未デコード）';
+
 function comparison(i: CeremonyInspection): HTMLElement {
   const table = document.createElement('table');
   const head = table.createTHead().insertRow();
   for (const label of ['', '期待値', '実際']) head.append(el('th', label));
   const body = table.createTBody();
-  const actualHash =
-    'error' in i.authenticatorData ? '（デコード失敗）' : i.authenticatorData.rpIdHash;
+  const actualHash = actualRpIdHash(i.authenticatorData);
   const rows: [string, string, string][] = [
     ['type', i.expected.type, i.clientData.type],
     ['origin', i.expected.origin, i.clientData.origin],
@@ -66,8 +77,14 @@ function comparison(i: CeremonyInspection): HTMLElement {
   return table;
 }
 
+function actualRpIdHash(data: CeremonyInspection['authenticatorData']): string {
+  if (!data) return NOT_DECODED;
+  return 'error' in data ? '（デコード失敗）' : data.rpIdHash;
+}
+
 function authenticatorSummary(i: CeremonyInspection): HTMLElement {
   const data = i.authenticatorData;
+  if (!data) return el('p', `authenticatorData: ${NOT_DECODED}`);
   if ('error' in data) return el('p', `authenticatorData: ${data.error}`, 'inspector-failure');
   const bit = (b: boolean) => (b ? '1' : '0');
   const { up, uv, be, bs, at, ed } = data.flags;

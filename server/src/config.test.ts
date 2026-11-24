@@ -9,7 +9,17 @@ describe('loadConfig', () => {
       rpId: 'localhost',
       rpOrigin: 'http://localhost:5173',
       dbPath: '/data/app.db',
+      inspection: false,
     });
+  });
+
+  it('turns the ceremony inspection on only when asked', () => {
+    expect(loadConfig({ INSPECTION: 'on' }).inspection).toBe(true);
+    expect(loadConfig({ INSPECTION: 'off' }).inspection).toBe(false);
+  });
+
+  it('refuses the inspection in production', () => {
+    expect(() => loadConfig({ NODE_ENV: 'production', INSPECTION: 'on' })).toThrow(/INSPECTION/);
   });
 
   it('drops a trailing slash so the exact origin comparison (C3) can match', () => {

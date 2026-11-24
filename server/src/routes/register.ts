@@ -7,7 +7,6 @@ import {
 import { CEREMONY_COOKIE, ceremonyCookieOptions, readCookie } from '../http/cookies.js';
 import { startSession } from '../session/http.js';
 import { runInspected } from './inspected.js';
-import { REGISTRATION_CHECKS } from '../webauthn/pipeline.js';
 import {
   buildRegistrationContext,
   createRegistrationOptions,
@@ -35,7 +34,6 @@ export function registerRoutes(deps: RegistrationDeps): Router {
     const { saved, inspection } = runInspected({
       ceremony: 'register',
       ctx,
-      checks: REGISTRATION_CHECKS,
       config: deps.config,
       res,
       save: () => saveRegistration(deps, ctx, response.response.transports ?? []),

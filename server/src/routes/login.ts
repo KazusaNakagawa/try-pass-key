@@ -7,7 +7,6 @@ import {
   createLoginOptions,
   saveAuthentication,
 } from '../webauthn/authentication.js';
-import { AUTHENTICATION_CHECKS } from '../webauthn/pipeline.js';
 import { runInspected } from './inspected.js';
 
 export function loginRoutes(deps: SessionDeps): Router {
@@ -31,7 +30,6 @@ export function loginRoutes(deps: SessionDeps): Router {
     } = runInspected({
       ceremony: 'login',
       ctx,
-      checks: AUTHENTICATION_CHECKS,
       config: deps.config,
       res,
       save: () => saveAuthentication(deps, ctx),

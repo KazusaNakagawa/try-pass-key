@@ -31,6 +31,9 @@ services:
       RP_ID: ${RP_ID:-localhost}
       RP_ORIGIN: ${RP_ORIGIN:-http://localhost:${WEB_PORT:-5173}}
       DB_PATH: /data/app.db
+      # Ceremony inspection on verify responses (M4, D34). Set INSPECTION=off in
+      # .env when a tunnel exposes this stack to devices you do not control.
+      INSPECTION: ${INSPECTION:-on}
       # Docker on macOS does not deliver file change events on bind mounts
       # (docs/01 K6). tsx watch uses chokidar, which polls when this is true.
       CHOKIDAR_USEPOLLING: ${WATCH_POLLING:-true}
