@@ -5,7 +5,7 @@ import type { Config } from '../config.js';
 import { bytesEqual, fromBase64Url, toBase64Url } from './bytes.js';
 import { consumeChallenge, findChallenge, issueChallenge } from './challenges.js';
 import type { RegistrationContext } from './checks/types.js';
-import { CHALLENGE_TTL_MS, RP_NAME, SUPPORTED_ALGORITHMS } from './constants.js';
+import { CHALLENGE_TTL_MS, INITIAL_BALANCE, RP_NAME, SUPPORTED_ALGORITHMS } from './constants.js';
 import { parseCosePublicKey, type CosePublicKey } from './cose.js';
 import { ParseError } from './errors.js';
 import {
@@ -123,6 +123,8 @@ export function buildRegistrationContext(
     },
     challengeRow,
     ceremonyId: input.ceremonyId,
+    sessionUserId: undefined,
+    sessionId: undefined,
     consumeChallenge: () => (challengeRow ? consumeChallenge(deps.db, challengeRow.id) : false),
     isCredentialRegistered: (id) =>
       deps.db.prepare('SELECT 1 FROM credentials WHERE id = ?').get(id) !== undefined,
@@ -151,7 +153,7 @@ export function saveRegistration(
       .prepare(
         'INSERT INTO users (id, user_handle, display_name, balance, created_at) VALUES (?, ?, ?, ?, ?)',
       )
-      .run(userId, row.userHandle, row.displayName, 0, now);
+      .run(userId, row.userHandle, row.displayName, INITIAL_BALANCE, now);
     deps.db
       .prepare(
         `INSERT INTO credentials

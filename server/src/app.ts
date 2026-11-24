@@ -8,6 +8,8 @@ import { requireSameOrigin } from './http/origin.js';
 import { loginRoutes } from './routes/login.js';
 import { registerRoutes } from './routes/register.js';
 import { sessionRoutes } from './routes/session.js';
+import { stepupRoutes } from './routes/stepup.js';
+import { transferRoutes } from './routes/transfer.js';
 
 export interface AppDeps {
   db: DatabaseSync;
@@ -32,6 +34,8 @@ export function createApp(deps: AppDeps) {
   app.use(registerRoutes(routeDeps));
   app.use(loginRoutes(routeDeps));
   app.use(sessionRoutes(routeDeps));
+  app.use(stepupRoutes(routeDeps));
+  app.use(transferRoutes(routeDeps));
 
   app.use(errorHandler);
   return app;

@@ -38,6 +38,8 @@ export const MeResponse = z.object({
   authAt: z.string(),
   /** Last step-up authentication in this session, if any. */
   stepupAt: z.string().nullable(),
+  /** Mock balance (M6). */
+  balance: z.number(),
 });
 export type MeResponse = z.infer<typeof MeResponse>;
 

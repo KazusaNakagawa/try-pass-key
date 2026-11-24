@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { AuthenticationResponse, type LoginVerifyResponse } from '@app/shared';
 import { CEREMONY_COOKIE, ceremonyCookieOptions, readCookie } from '../http/cookies.js';
-import { startSession, type SessionDeps } from '../session/http.js';
+import { startSession, toMeResponse, type SessionDeps } from '../session/http.js';
 import {
   buildAuthenticationContext,
   createLoginOptions,
@@ -37,12 +37,7 @@ export function loginRoutes(deps: SessionDeps): Router {
     const session = startSession(deps, req, res, user);
 
     const body: LoginVerifyResponse = {
-      me: {
-        userId: user.id,
-        displayName: user.displayName,
-        authAt: session.authAt,
-        stepupAt: session.stepupAt,
-      },
+      me: toMeResponse(deps.db, session),
       credential,
       ...(inspection ? { inspection } : {}),
     };

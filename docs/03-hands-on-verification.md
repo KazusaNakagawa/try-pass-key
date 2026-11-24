@@ -70,6 +70,29 @@ Chrome + 1Password（macOS）では、候補を選ぶと Chrome のパスキー�
 | パスワードマネージャーの項目名が登録した表示名と違う | 1Password は、保存時にページのユーザー名欄に入っていた文字を項目名にすることがある | 気にしなくてよい。サーバーは userHandle で識別し、項目名は使わない |
 | 同じ名前のパスキーが複数並ぶ | 登録するたびに別ユーザーになる。表示名は区別に使われない | 不要なものは削除する |
 
+### 送金する（ステップアップ）
+
+ログイン中は「送金（模擬）」が出る。残高は登録時に 100,000 入る（D39）。M6 より前に作ったユーザーは残高 0 のままなので、`docker compose down -v` で作り直すか、次で直す。
+
+```bash
+docker compose exec server sqlite3 /data/app.db "UPDATE users SET balance = 100000;"
+```
+
+1. 送金先（例: `test-account-1`）と金額（例: `1000`）を入れて「送金する」を押す
+2. 最初の送金は `step_up_required` で断られ、画面が自動でステップアップを始める。パスキーの確認（Touch ID、1Password など）が出るので承認する。ログインと違い、候補にはログイン中のユーザーの鍵だけが出る（`allowCredentials`）
+3. 承認後に同じ内容で送り直され、「送金しました」と残高・履歴が更新される。「直近の ceremony」に `ステップアップ（受理）` が出て、検証欄に S1 が並ぶ（L2 はない）
+4. `#me` の `stepupAt` に承認の時刻が入る
+
+ステップアップなしの送金が拒否されることは、DevTools の Console から送金 API を直接呼ぶと確かめられる（画面を通さないので、自動のステップアップは走らない）。
+
+```js
+await (await fetch('/api/transfer', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ to: 'test-account-1', amount: 1000 }) })).json()
+```
+
+`{ error: 'step_up_required', check: 'S3', ... }` が返り、残高は変わらない。ログイン済みでも、承認がなければ送金できない（docs/01 §12 の受け入れ基準）。
+
+金額の改ざん（S2）、期限切れ・2回目の送金（S3）、他人の鍵（S1）はブラウザ操作では作りにくい（画面は承認した内容のまま送り直し、候補には自分の鍵しか出ない）。自動テスト（`server/test/transfer-gate-attacks.test.ts`、`server/test/stepup-attacks.test.ts`、`server/src/routes/transfer.test.ts`）で再現している。
+
 ## 3. DB の中身を見る
 
 DB は Docker の名前付きボリュームの中にあり、ホストのフォルダからは開けない（D3）。写しを取り出して DB クライアントで開く。
@@ -148,6 +171,18 @@ SELECT id, auth_at, last_seen_at, expires_at FROM sessions;
 - `expires_at` は `auth_at` のちょうど 8 時間後（絶対期限）
 - `last_seen_at` はアクセスのたびに進み、ここから 30 分アクセスがないと切れる（アイドル期限）
 - ログインのたびに古いセッションは消え、新しい ID が発行される（セッション固定対策）。ログイン中の行は1つだけになる
+
+### ステップアップの承認を読む
+
+```sql
+SELECT id, auth_at, stepup_at, approved_tx_hash, expires_at FROM sessions;
+SELECT purpose, user_id, tx_hash, expires_at FROM challenges WHERE purpose = 'stepup';
+SELECT * FROM transfers ORDER BY created_at DESC;
+```
+
+- 送金を押した直後（ステップアップ中）は `challenges` に `purpose = 'stepup'` の行があり、`tx_hash` に取引ハッシュが入る。verify で消える
+- 承認が済むとセッションの `id` が変わり（再発行）、`stepup_at` と `approved_tx_hash` が入る。`auth_at` と `expires_at` は元のまま
+- 送金が済むと `approved_tx_hash` は NULL に戻る（使い捨て、S3）。`stepup_at` は残るので、`/api/me` で最後に承認した時刻が見られる
 
 ### Cookie と DB のハッシュを照合する
 

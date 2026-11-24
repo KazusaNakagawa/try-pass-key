@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import { inTransaction } from '../db.js';
 
 /** docs/01 §8 session policy */
 export const SESSION_IDLE_MS = 30 * 60 * 1000;
@@ -80,6 +81,37 @@ export function loadSession(db: DatabaseSync, token: string, now: Date): Session
     stepupAt: row.stepup_at,
     expiresAt: row.expires_at,
   };
+}
+
+/**
+ * Step-up: replaces the session with a new token (docs/01 §8, re-issue on
+ * step-up) and records the approval on it. auth_at and the absolute timeout are
+ * kept, so stepping up never extends a session. Returns undefined if the old
+ * session is gone.
+ */
+export function rotateSession(
+  db: DatabaseSync,
+  oldToken: string,
+  now: Date,
+  approval: { txHash: string },
+): { token: string; session: Session } | undefined {
+  // Delete and insert together: a failed insert must not log the user out.
+  return inTransaction(db, () => {
+    const old = db
+      .prepare('DELETE FROM sessions WHERE id = ? RETURNING user_id, auth_at, expires_at')
+      .get(hashToken(oldToken)) as
+      { user_id: string; auth_at: string; expires_at: string } | undefined;
+    if (!old) return undefined;
+    const token = randomBytes(32).toString('base64url');
+    const at = now.toISOString();
+    db.prepare(
+      `INSERT INTO sessions
+       (id, user_id, auth_at, last_seen_at, stepup_at, approved_tx_hash, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(hashToken(token), old.user_id, old.auth_at, at, at, approval.txHash, old.expires_at);
+    const session = loadSession(db, token, now);
+    return session ? { token, session } : undefined;
+  });
 }
 
 export function destroySession(db: DatabaseSync, token: string): void {

@@ -99,6 +99,9 @@ describe('POST /api/register/verify', () => {
     const body = RegisterVerifyResponse.parse(await res.json());
     expect(body.displayName).toBe('test-user-2');
     expect(body.credential).toMatchObject({ alg: -7, backupEligible: true, backupState: true });
+    const user = db.prepare('SELECT balance FROM users WHERE id = ?').get(body.userId) as
+      { balance: number } | undefined;
+    expect(user?.balance).toBe(100000);
 
     const row = db
       .prepare('SELECT user_id, length(public_key) AS keyLength FROM credentials WHERE user_id = ?')

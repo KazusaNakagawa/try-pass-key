@@ -1,8 +1,10 @@
 import type { CookieOptions, Request, RequestHandler, Response } from 'express';
+import type { MeResponse } from '@app/shared';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Config } from '../config.js';
 import { readCookie } from '../http/cookies.js';
 import { HttpError } from '../http/errors.js';
+import { getBalance } from '../users.js';
 import {
   createSession,
   destroySession,
@@ -49,6 +51,18 @@ export function startSession(
   return session;
 }
 
+/** The token of the session cookie sent with the request (requireSession checked it). */
+export function sessionToken(req: Request): string {
+  const token = readCookie(req, SESSION_COOKIE);
+  if (!token) throw new Error('requireSession middleware is missing');
+  return token;
+}
+
+/** Points the browser at a session that replaced its previous one (step-up). */
+export function setSessionCookie(deps: SessionDeps, res: Response, token: string): void {
+  res.cookie(SESSION_COOKIE, token, sessionCookieOptions(deps.config));
+}
+
 export function endSession(deps: SessionDeps, req: Request, res: Response): void {
   const token = readCookie(req, SESSION_COOKIE);
   if (token) destroySession(deps.db, token);
@@ -72,6 +86,17 @@ export function requireSession(deps: SessionDeps): RequestHandler {
     }
     res.locals.session = session;
     next();
+  };
+}
+
+/** GET /api/me body, also returned after login and step-up. The balance is read now. */
+export function toMeResponse(db: DatabaseSync, session: Session): MeResponse {
+  return {
+    userId: session.userId,
+    displayName: session.displayName,
+    authAt: session.authAt,
+    stepupAt: session.stepupAt,
+    balance: getBalance(db, session.userId),
   };
 }
 

@@ -51,8 +51,11 @@ export default defineConfig(
       ...vitest.configs.recommended.rules,
       'vitest/no-disabled-tests': 'error',
       'vitest/no-focused-tests': 'error',
-      // expectRejectedBy (server/test/expect-check.ts) asserts too.
-      'vitest/expect-expect': ['error', { assertFunctionNames: ['expect', 'expectRejectedBy'] }],
+      // expectRejectedBy (server/test/expect-check.ts) and expectStepUpRequired assert too.
+      'vitest/expect-expect': [
+        'error',
+        { assertFunctionNames: ['expect', 'expectRejectedBy', 'expectStepUpRequired'] },
+      ],
       'sonarjs/assertions-in-tests': 'off',
     },
   },

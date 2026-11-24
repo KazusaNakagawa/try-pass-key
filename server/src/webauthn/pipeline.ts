@@ -16,7 +16,17 @@ import { R2 } from './checks/R2.js';
 import { R3 } from './checks/R3.js';
 import { R4 } from './checks/R4.js';
 import { R5 } from './checks/R5.js';
-import type { AuthenticationContext, Check, CheckId, RegistrationContext } from './checks/types.js';
+import { S1 } from './checks/S1.js';
+import { S2 } from './checks/S2.js';
+import { S3 } from './checks/S3.js';
+import type {
+  AuthenticationContext,
+  Check,
+  CheckId,
+  RegistrationContext,
+  StepupContext,
+  TransferContext,
+} from './checks/types.js';
 
 /**
  * Every check a registration must pass, in order. Routes use this constant and
@@ -64,6 +74,38 @@ export const AUTHENTICATION_CHECKS: readonly Check<AuthenticationContext>[] = Ob
   L4,
   A4,
 ]);
+
+/**
+ * Every check a step-up re-authentication must pass (docs/01 §5.3). The login
+ * list with S1 in place of L2: the user is the one logged in to the session, and
+ * userHandle may be absent because allowCredentials is set. Same rules otherwise.
+ */
+export const STEPUP_CHECKS: readonly Check<StepupContext>[] = Object.freeze([
+  C4,
+  C2,
+  C5,
+  C1,
+  C3,
+  A1,
+  A2,
+  A3,
+  L1,
+  S1,
+  L3,
+  L4,
+  A4,
+]);
+
+/**
+ * Checked before a transfer moves money. Both read the approval loaded with the
+ * context; S3 consumes it first, so a transfer that S2 rejects still uses it up.
+ */
+export const TRANSFER_GATE_CHECKS: readonly Check<TransferContext>[] = Object.freeze([S3, S2]);
+
+/** Runs the frozen transfer gate. The transfer route calls this, never runChecks with a list. */
+export function runTransferGate(ctx: TransferContext): void {
+  runChecks(ctx, TRANSFER_GATE_CHECKS);
+}
 
 /**
  * Runs every check in order and stops at the first that throws.

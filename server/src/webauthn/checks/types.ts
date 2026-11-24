@@ -20,7 +20,10 @@ export type CheckId =
   | 'L1'
   | 'L2'
   | 'L3'
-  | 'L4';
+  | 'L4'
+  | 'S1'
+  | 'S2'
+  | 'S3';
 
 export class CheckError extends Error {
   constructor(
@@ -42,6 +45,8 @@ export interface ChallengeRow {
   displayName: string | null;
   userId: string | null;
   txHash: string | null;
+  /** Step-up only: the session that asked for the challenge. */
+  sessionId: string | null;
   expiresAt: string;
 }
 
@@ -60,6 +65,13 @@ export interface CeremonyContext {
   challengeRow: ChallengeRow | undefined;
   /** Value of the "ceremony" cookie sent with the request, if any. */
   ceremonyId: string | undefined;
+  /** Step-up only: the user of the session the response was submitted with (S1). */
+  sessionUserId: string | undefined;
+  /**
+   * Step-up only: the session the response was submitted with (its ID, the token
+   * hash). C5 binds a step-up challenge to it instead of the ceremony cookie (D40).
+   */
+  sessionId: string | undefined;
   /** Deletes the challenge row. Returns false if it was already gone. */
   consumeChallenge(): boolean;
 }
@@ -96,6 +108,35 @@ export interface AuthenticationContext extends CeremonyContext {
   /** The user that userHandle names. The session is created for this user (L2). */
   userByHandle: UserRecord | undefined;
   signature: Buffer;
+}
+
+/**
+ * A step-up re-authentication (docs/01 §5.3). Same as a login, except the user is
+ * known before the ceremony: the one logged in to the session.
+ */
+export interface StepupContext extends AuthenticationContext {
+  sessionUserId: string;
+  sessionId: string;
+}
+
+/** A step-up approval recorded on the session. */
+export interface TransferApproval {
+  stepupAt: string;
+  approvedTxHash: string;
+}
+
+/** What the transfer gate (S3, S2) checks before money moves. */
+export interface TransferContext {
+  /** Hash of the transfer being requested (transferTxHash). */
+  txHash: string;
+  now: Date;
+  /** The session's approval, read when the context was built. */
+  approval: TransferApproval | undefined;
+  /**
+   * Takes that approval off the session, only if it is still there unchanged.
+   * False when another request used it first.
+   */
+  consumeApproval(): boolean;
 }
 
 export interface Check<Ctx> {

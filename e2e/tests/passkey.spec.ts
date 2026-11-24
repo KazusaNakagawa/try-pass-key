@@ -79,3 +79,90 @@ test('login button: username-less login in a browser without Conditional UI', as
   await expect(page.locator('#inspector')).toContainText('ログイン（受理）');
   await expect(page.locator('#inspector')).toContainText('保存値');
 });
+
+test('transfer: the page steps up with the passkey, then the money moves', async ({ page }) => {
+  await addVirtualAuthenticator(page);
+  await register(page, 'test-user-e2e-3');
+
+  await expect(page.locator('#transfer-section')).toBeVisible();
+  await expect(page.locator('#balance')).toHaveText('100,000');
+  await page.locator('#transfer-to').fill('test-account-1');
+  await page.locator('#transfer-amount').fill('1000');
+  await page.locator('#transfer-form button[type=submit]').click();
+
+  // The first attempt is refused (step_up_required), the passkey approves, the retry goes through.
+  await expect(page.locator('#transfer-result')).toContainText('送金しました');
+  await expect(page.locator('#balance')).toHaveText('99,000');
+  await expect(page.locator('#transfer-history')).toContainText('test-account-1');
+  await expect(page.locator('#inspector')).toContainText('ステップアップ（受理）');
+  await expect(page.locator('#inspector')).toContainText('S1 ✓');
+  await expect(page.locator('#me')).not.toContainText('"stepupAt": null');
+});
+
+test('transfer: the form cannot be submitted again while a step-up is running', async ({
+  page,
+}) => {
+  await addVirtualAuthenticator(page);
+  await register(page, 'test-user-e2e-4');
+  const submit = page.locator('#transfer-form button[type=submit]');
+  let disabledDuringStepUp: boolean | undefined;
+  await page.route('**/api/stepup/options', async (route) => {
+    disabledDuringStepUp = await submit.isDisabled();
+    await route.continue();
+  });
+
+  await page.locator('#transfer-to').fill('test-account-1');
+  await page.locator('#transfer-amount').fill('1000');
+  await submit.click();
+  await expect(page.locator('#transfer-result')).toContainText('送金しました');
+  expect(disabledDuringStepUp).toBe(true);
+  await expect(submit).toBeEnabled();
+});
+
+test('transfer: the step-up shows in the inspector even if the transfer then fails', async ({
+  page,
+}) => {
+  await addVirtualAuthenticator(page);
+  await register(page, 'test-user-e2e-5');
+  let transfers = 0;
+  await page.route('**/api/transfer', async (route) => {
+    transfers++;
+    // Let the first attempt reach the server (step_up_required); fail the retry.
+    if (transfers === 1) return route.continue();
+    return route.fulfill({
+      status: 400,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'insufficient_funds', detail: 'simulated' }),
+    });
+  });
+
+  await page.locator('#transfer-to').fill('test-account-1');
+  await page.locator('#transfer-amount').fill('1000');
+  await page.locator('#transfer-form button[type=submit]').click();
+  await expect(page.locator('#transfer-result')).toContainText('送金できませんでした');
+  await expect(page.locator('#inspector')).toContainText('ステップアップ（受理）');
+});
+
+test('a failed login message does not linger after registering', async ({ page }) => {
+  await addVirtualAuthenticator(page);
+  await register(page, 'test-user-e2e-6');
+  // Every login is rejected, as for a passkey left over from a deleted database.
+  await page.route('**/api/login/verify', (route) =>
+    route.fulfill({
+      status: 400,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        error: 'unknown_credential',
+        detail: 'L1: unknown credential',
+        check: 'L1',
+      }),
+    }),
+  );
+  await page.locator('#logout').click();
+  await expect(page.locator('#login-result')).toContainText('ログインできませんでした');
+
+  await page.locator('#display-name').fill('test-user-e2e-7');
+  await page.locator('#register-form button[type=submit]').click();
+  await expect(page.locator('#me')).toContainText('ログイン中: test-user-e2e-7');
+  await expect(page.locator('#login-result')).toBeHidden();
+});

@@ -72,7 +72,12 @@ describe('registration logs the user in', () => {
     const { browser, userId } = await registerUser('test-user-1');
     expect(browser.cookies.has('session')).toBe(true);
     const me = MeResponse.parse(await (await browser.request('GET', '/api/me')).json());
-    expect(me).toMatchObject({ userId, displayName: 'test-user-1', stepupAt: null });
+    expect(me).toMatchObject({
+      userId,
+      displayName: 'test-user-1',
+      stepupAt: null,
+      balance: 100000,
+    });
   });
 });
 
@@ -90,7 +95,11 @@ describe('username-less login', () => {
     const res = await login(browser, user);
     expect(res.status).toBe(200);
     const body = LoginVerifyResponse.parse(await res.json());
-    expect(body.me).toMatchObject({ userId: user.userId, displayName: 'test-user-2' });
+    expect(body.me).toMatchObject({
+      userId: user.userId,
+      displayName: 'test-user-2',
+      balance: 100000,
+    });
     const me = MeResponse.parse(await (await browser.request('GET', '/api/me')).json());
     expect(me.userId).toBe(user.userId);
   });

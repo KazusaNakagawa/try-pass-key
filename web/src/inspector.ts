@@ -36,8 +36,10 @@ function el(tag: string, text: string, className?: string): HTMLElement {
   return node;
 }
 
+const CEREMONY_NAMES = { register: '登録', login: 'ログイン', stepup: 'ステップアップ' } as const;
+
 function heading(i: CeremonyInspection): HTMLElement {
-  const name = i.ceremony === 'register' ? '登録' : 'ログイン';
+  const name = CEREMONY_NAMES[i.ceremony];
   const f = i.failure;
   let outcome = '受理';
   if (f?.kind === 'check') outcome = `拒否: ${f.check ?? '?'}`;

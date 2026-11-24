@@ -284,6 +284,14 @@ sequenceDiagram
 - `allowCredentials` をログイン中ユーザーの鍵に限定し、別人の鍵での承認を拒否する。
 - ブラウザ上で改ざんされた画面に騙されて承認するリスクは残る（WebAuthn は取引内容を認証器に表示しない）。この限界は9章に記す。
 
+実装の補足（M6、D36〜D39）:
+
+- **取引ハッシュ**: `base64url(SHA-256(JSON.stringify({ kind: 'transfer', to, amount })))`。キーはこの順で組み立て直すので、リクエスト本文の書き方に左右されない。`kind` は、M7 のパスキー削除を同じ仕組みで承認したときに、別の種類の操作の承認として流用されないようにするため（`server/src/transfer/tx-hash.ts`）
+- **紐づけ方**: challenge は乱数のまま。options で取引ハッシュを challenge の行（`tx_hash`）に保存し、verify が通ったらセッションの `approved_tx_hash` に写す。challenge に取引を埋め込んでも、認証器が取引を表示しない以上、利用者が何に署名したかの保証は増えない（D37）
+- **検証**: verify は `STEPUP_CHECKS` を通す。ログインの検証から L2 を外し、S1（鍵の持ち主がセッションのユーザー）を入れたもの。`allowCredentials` を指定した認証では `userHandle` が返らないことがあり（WebAuthn L3 §5.2.2）、`userHandle` を必須にする L2 では正当な承認が拒否されうる。C5 は一時 Cookie ではなく、行の `session_id` と、応答を送ってきたセッションの ID（トークンのハッシュ）の一致で縛る。ユーザーの一致で縛ると、漏れた応答を同じユーザーの別セッション（盗まれた Cookie）で使えてしまう（D40）
+- **セッションIDの再発行**: verify が通ったら、古いセッションを消して新しいIDを発行し、そこに `stepup_at` と `approved_tx_hash` を記録する。`auth_at` と絶対期限は引き継ぐ（ステップアップで延びない）。signCount の記録とセッションの作り直しは1つのトランザクションで行い、途中で失敗したらどちらも残らない
+- **送金のゲート**: `/api/transfer` は本文を検証し、セッションの承認を読み込んでから `TRANSFER_GATE_CHECKS`（S3 → S2）を通す。S2 は読み込んだ承認と比べるので、S3 に依存しない。S3 が承認を先に消費するので、S2 で拒否される送金でも承認は使い切りになる。消費は「読んだ値と一致するときだけ消す」条件付き UPDATE で行い、同じ承認で同時に来た2つの送金は片方しか通らない（D38）。残高不足でも承認は戻さない。`/api/stepup/options` が先に残高を確かめるので、普通は起きない
+
 ## 6. サーバー側の検証項目
 
 PoCの学習の中心。ライブラリが内部で行う検証を列挙し、各項目に対して「外すと何が通るか」をテストで再現する。
@@ -315,7 +323,7 @@ export function runChecks(ctx: CeremonyContext, checks: readonly Check[]) { /* �
 | C2 | `challenge` がサーバー発行の未使用・期限内の値と一致 | リプレイ攻撃（過去の署名の再送） |
 | C3 | `origin` が許可 origin（`RP_ORIGIN`）と完全一致し、`crossOrigin` が true でない | フィッシングサイト経由の応答、他サイトの iframe から呼ばせた応答を受理 |
 | C4 | challenge を、他のどの検査よりも、また attestationObject のデコードよりも先に削除する（検証の成否にかかわらず使い捨て）。同時に2つのリクエストが行を見つけた場合は、削除できた方だけが続行する | 同じ challenge での二重登録・二重ログイン、壊れた応答を送って challenge を使い回すこと |
-| C5 | challenge が要求元のブラウザに発行されたもの（challenge の値で引いた行の ID が一時 Cookie `ceremony` の値と一致。ステップアップでは行の `user_id` がセッションのユーザーと一致） | 漏れた署名済み応答（XSS での窃取、ログへの混入など）を、攻撃者が別のブラウザから送って受理される |
+| C5 | challenge が要求元のブラウザに発行されたもの（challenge の値で引いた行の ID が一時 Cookie `ceremony` の値と一致。ステップアップでは行の `session_id` が、応答を送ってきたセッションの ID と一致。D40） | 漏れた署名済み応答（XSS での窃取、ログへの混入など）を、攻撃者が別のブラウザから送って受理される |
 
 ### 6.2 authenticatorData
 
@@ -345,7 +353,19 @@ export function runChecks(ctx: CeremonyContext, checks: readonly Check[]) { /* �
 | L3 | 保存した公開鍵で `authenticatorData ‖ SHA-256(clientDataJSON)` の署名を検証 | 署名偽造の拒否。認証の本体 |
 | L4 | BE が登録時に保存した値と同じで、BS=1 なら BE=1（WebAuthn L3 §7.2） | 登録した認証器とは別のものからの応答を受理し、BE/BS の記録が矛盾する（端末固定の鍵が同期型を名乗る、など） |
 
-### 6.5 `@simplewebauthn/server` との比較（M5、D35）
+### 6.5 ステップアップ時のみ（M6、D36）
+
+再認証（`/api/stepup/verify`）の `STEPUP_CHECKS` は、C1〜C5、A1〜A4、L1、L3、L4 にこの S1 を加えたもの（L2 は使わない。5.3 の補足）。S2・S3 は送金（`/api/transfer`）の直前に `TRANSFER_GATE_CHECKS` として S3 → S2 の順で実行する。攻撃再現は `server/test/stepup-attacks.test.ts` と `server/test/transfer-gate-attacks.test.ts`。
+
+| # | 検証 | 外した場合に通る攻撃 |
+|---|---|---|
+| S1 | credential の持ち主がセッションのユーザーと一致し、`userHandle` が返っていればそれもセッションのユーザーを指す（WebAuthn L3 §7.2 の手順6。ユーザーが ceremony の前に特定されている場合） | セッションを盗んだ攻撃者が、自分のアカウントに登録した自分のパスキーで承認し、被害者として送金する（`allowCredentials` はブラウザへの依頼にすぎない） |
+| S2 | 送金内容の取引ハッシュが、セッションの承認済みハッシュと一致する。承認がなければ拒否する | 承認後に金額や送金先を書き換えた送金が通る |
+| S3 | 承認があり、5分以内で、まだ使われていない（この送金で消費できた） | 5分を過ぎた承認での送金、1回の承認での2回目の送金。ステップアップなしの送金も S3 が拒否するが、S3 を外しても S2 が承認なしとして拒否する（多層防御） |
+
+S2・S3 で拒否したときは `401 step_up_required` を返し、どちらで落ちたかを `check` に入れる。クライアントはステップアップをやり直せばよい。S1 は他の検証項目と同じく 400（`credential_not_owned`）。
+
+### 6.6 `@simplewebauthn/server` との比較（M5、D35）
 
 `server/test/differential.test.ts` で、正常系と 6.1〜6.4 の各項目の攻撃シナリオ（`attacks.test.ts`・`login-attacks.test.ts` と同じ改ざん）の応答を、自前パイプラインと `@simplewebauthn/server` 14.1.0 の両方に通して判定を比べた。ライブラリには、応答が答えている options の challenge（このサーバーのように challenge を値で引くアプリが渡すもの）、`RP_ORIGIN`、`RP_ID`、`requireUserVerification: true`、要求したアルゴリズム、ログインでは credential ID で引いた保存済みの鍵を渡す。ライブラリが拒否するケースでは、エラーメッセージが狙った項目のものであることも確かめている。
 
@@ -373,16 +393,17 @@ export function runChecks(ctx: CeremonyContext, checks: readonly Check[]) { /* �
 | POST | `/api/login/options` | 不要 | 認証オプションを返す |
 | POST | `/api/login/verify` | 不要 | assertion を検証しセッションを発行 |
 | POST | `/api/logout` | 要 | セッション破棄 |
-| GET | `/api/me` | 要 | ユーザー情報と `auth_at` / `stepup_at` |
-| POST | `/api/stepup/options` | 要 | 取引内容に紐づく再認証オプション |
-| POST | `/api/stepup/verify` | 要 | 再認証を検証しセッションに承認を記録 |
-| POST | `/api/transfer` | 要 + ステップアップ | 模擬送金。残高を減らし履歴を記録する |
+| GET | `/api/me` | 要 | ユーザー情報、`auth_at` / `stepup_at`、模擬残高 `balance` |
+| POST | `/api/stepup/options` | 要 | 本文 `{to, amount}`。取引内容に紐づく再認証オプション。`allowCredentials` はログイン中ユーザーの鍵だけ。残高不足なら `insufficient_funds` |
+| POST | `/api/stepup/verify` | 要 | 再認証を検証し、セッションIDを再発行して承認を記録 |
+| POST | `/api/transfer` | 要 + ステップアップ | 本文 `{to, amount}`（`to` は1〜64文字、`amount` は1〜1,000,000 の整数）。模擬送金。残高を減らし履歴を記録する |
+| GET | `/api/transfers` | 要 | 残高と送金履歴（新しい順に最大20件） |
 
-エラー応答は `{ "error": "<code>", "detail": "<人間向け説明>" }` に統一する。主なコードは `invalid_challenge`、`invalid_origin`、`user_verification_required`、`unknown_credential`、`signature_invalid`、`step_up_required`。
+エラー応答は `{ "error": "<code>", "detail": "<人間向け説明>" }` に統一する。主なコードは `invalid_challenge`、`invalid_origin`、`user_verification_required`、`unknown_credential`、`signature_invalid`、`credential_not_owned`、`step_up_required`（401）、`insufficient_funds`。
 
 6章の検証で拒否した場合は、どの項目で落ちたかを `check`（`C3` など）で返す（学習用の可視化）。検証項目とコードの対応は `server/src/http/errors.ts` の `CHECK_ERROR_CODES` にある。デコードできない応答は `malformed_response`、リクエスト本文の形式違反は `invalid_request`、`Origin` ヘッダーの不一致は `invalid_request_origin`（403）。
 
-環境変数 `INSPECTION=on` のとき（compose の開発スタックは既定で on、それ以外の既定は off、`NODE_ENV=production` との組み合わせは起動時に拒否）、`/api/register/verify`・`/api/login/verify` の応答に `inspection` を付ける（学習用の可視化、M4、D33、D34）。成功時も、6章の検証やデコードで拒否した 400 応答も同じ形で、期待値、デコードした clientDataJSON と authenticatorData（フラグ、rpIdHash、signCount）、ログイン時は署名の検証（L3）を通ったときだけ保存済みの signCount と BE/BS、各検証項目の結果（`pass` / `fail` / `not_run`）、失敗理由を持つ。型は `shared/src/inspection.ts` の `CeremonyInspection`。authenticatorData は challenge の照合（C2）を通ったときだけデコードして載せる。リクエスト本文の形式違反など検証の前に落ちた応答や、DB エラーなど 6章の検証でもデコードでもない失敗（500）には付かない。
+環境変数 `INSPECTION=on` のとき（compose の開発スタックは既定で on、それ以外の既定は off、`NODE_ENV=production` との組み合わせは起動時に拒否）、`/api/register/verify`・`/api/login/verify`・`/api/stepup/verify` の応答に `inspection` を付ける（学習用の可視化、M4、D33、D34。ステップアップは M6）。成功時も、6章の検証やデコードで拒否した 400 応答も同じ形で、期待値、デコードした clientDataJSON と authenticatorData（フラグ、rpIdHash、signCount）、ログイン時は署名の検証（L3）を通ったときだけ保存済みの signCount と BE/BS、各検証項目の結果（`pass` / `fail` / `not_run`）、失敗理由を持つ。型は `shared/src/inspection.ts` の `CeremonyInspection`。authenticatorData は challenge の照合（C2）を通ったときだけデコードして載せる。リクエスト本文の形式違反など検証の前に落ちた応答や、DB エラーなど 6章の検証でもデコードでもない失敗（500）には付かない。
 
 ## 8. データモデル
 
@@ -419,6 +440,7 @@ erDiagram
     text display_name "register時のみ"
     text user_id "stepup時のみ"
     text tx_hash "stepup時の取引ハッシュ"
+    text session_id "stepup時のみ。要求したセッションのID(トークンのハッシュ)"
     text expires_at
   }
   sessions {
@@ -445,7 +467,7 @@ challenge は登録・認証前のためユーザーと紐づかないことが�
 
 - Cookie: `ceremony=<行ID>; HttpOnly; SameSite=Strict; Path=/api; Max-Age=300`（HTTPS 時は `Secure`）
 - verify: `SELECT * FROM challenges WHERE challenge = ?` で行を引き（`challenge` 列は UNIQUE）、C2 で用途と期限、C4 で `DELETE FROM challenges WHERE id = ? RETURNING id` による消費、C5 で Cookie との一致を確かめる
-- ステップアップはログイン中なので一時 Cookie を使わず、行の `user_id` とセッションのユーザーの一致で縛る
+- ステップアップはログイン中なので一時 Cookie を使わず、行の `session_id` と、応答を送ってきたセッションの ID の一致で縛る（D40。当初の D14 はユーザーの一致だった）
 - 判断の経緯は decisions の D14、D21
 
 登録の options から verify までの一時状態（`user_handle`、`display_name`）も challenge の行に持たせる。`users` の行は verify が成功したときに初めて作るので、途中で離脱しても未完成のユーザーが残らない。
@@ -473,8 +495,8 @@ challenge は登録・認証前のためユーザーと紐づかないことが�
 | フィッシング（AiTM含む） | origin / rpIdHash 検証（C3, A1） | なし（WebAuthnの構造で防がれる） |
 | リプレイ | challenge の使い捨て（C2, C4）、要求元ブラウザへの紐づけ（C5） | なし |
 | サーバーDB漏洩 | 公開鍵しか持たない | セッションIDが漏れると有効期間中は悪用される |
-| 盗まれたセッションでの送金 | ステップアップ必須 | ステップアップ有効期間（5分）内の窃取 |
-| 承認後の取引改ざん | challenge を取引ハッシュに紐づけ | なし |
+| 盗まれたセッションでの送金 | ステップアップ必須（S3）、承認はセッションのユーザー自身の鍵だけ（S1） | 承認から送金までの間（最長5分）にセッションを盗まれ、承認した内容のまま送金される場合 |
+| 承認後の取引改ざん | 承認を取引ハッシュに紐づけ（S2） | なし |
 | 画面改ざんによる誤承認（Man-in-the-Browser） | 対象外 | 認証器は取引内容を表示しないため残る。本番では別経路での通知・確認が必要 |
 | 端末の乗っ取り | UV必須（A3） | ロック解除済み端末を操作される場合は防げない |
 | 同期元（iCloud、Google、1Password 等）の乗っ取り、またはロック解除中の端末へのマルウェア | BE/BS と AAGUID を記録し可視化 | 防げない。保管庫が開かれれば秘密鍵も使われる。高リスク用途では端末固定鍵（BE=0）の要求を検討 |
@@ -566,7 +588,7 @@ try-pass-key/
 - [ ] ホストに Docker 以外をインストールせずに、起動・テスト・初期化ができる
 - [ ] `docker compose down -v` の後に `up` すると、ユーザー0件のまっさらな状態に戻る
 - [ ] Chrome と Safari の両方で、登録とユーザー名なしログインが成功する
-- [ ] 6章の C1〜C5、A1〜A4、R1〜R5、L1〜L4 のそれぞれにテストがあり、すべて通る
+- [ ] 6章の C1〜C5、A1〜A4、R1〜R5、L1〜L4、S1〜S3 のそれぞれにテストがあり、すべて通る
 - [ ] origin を改ざんした assertion、使用済み challenge の再送、別ブラウザに発行された challenge での応答、UV=0 の assertion が拒否されることをテストで示せる
 - [ ] ログイン済みでもステップアップなしの送金が `step_up_required` で拒否される
 - [ ] ステップアップ後に金額を変えた送金が拒否される
