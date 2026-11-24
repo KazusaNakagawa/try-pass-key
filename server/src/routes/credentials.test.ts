@@ -67,14 +67,70 @@ describe('GET /api/credentials', () => {
 describe('adding a passkey', () => {
   it("excludes the user's existing passkeys in the options", async () => {
     const user = await registerUser(server.baseUrl);
+    await stepUp(user, ADD);
     const options = await addCredentialOptions(user);
     expect(options.excludeCredentials.map((c) => c.id)).toEqual([idOf(user.authenticator)]);
     expect(options.user.id).toBe(user.userHandle.toString('base64url'));
   });
 
-  it('is refused without a step-up, and nothing is saved', async () => {
+  it('refuses options without an approval, before anything is created', async () => {
     const user = await registerUser(server.baseUrl);
-    await expectError(await addCredential(user), 401, 'step_up_required', 'S3');
+    await expectError(
+      await user.browser.request('POST', '/api/credentials/options'),
+      401,
+      'step_up_required',
+    );
+  });
+
+  it('refuses options once the approval was used up by another request (D48)', async () => {
+    const user = await registerUser(server.baseUrl);
+    await stepUp(user, ADD);
+    // An unapproved transfer runs the gate: S3 consumes the add approval, S2 refuses.
+    const probe = await user.browser.request('POST', '/api/transfer', {
+      to: 'test-account-1',
+      amount: 1000,
+    });
+    expect(probe.status).toBe(401);
+    await expectError(
+      await user.browser.request('POST', '/api/credentials/options'),
+      401,
+      'step_up_required',
+    );
+  });
+
+  it('refuses options when less than a minute of the approval is left', async () => {
+    const user = await registerUser(server.baseUrl);
+    await stepUp(user, ADD);
+    const fourMinutesAgo = new Date(Date.now() - 4 * 60_000 - 1000).toISOString();
+    server.db
+      .prepare('UPDATE sessions SET stepup_at = ? WHERE user_id = ?')
+      .run(fourMinutesAgo, user.userId);
+    await expectError(
+      await user.browser.request('POST', '/api/credentials/options'),
+      401,
+      'step_up_required',
+    );
+  });
+
+  it('gives the browser only the time left on the approval, less a margin', async () => {
+    const user = await registerUser(server.baseUrl);
+    await stepUp(user, ADD);
+    const options = await addCredentialOptions(user);
+    expect(options.timeout).toBeLessThanOrEqual(5 * 60_000 - 30_000);
+    expect(options.timeout).toBeGreaterThan(5 * 60_000 - 40_000);
+  });
+
+  it('is refused in verify when the approval is gone, and nothing is saved', async () => {
+    const user = await registerUser(server.baseUrl);
+    await stepUp(user, ADD);
+    const options = await addCredentialOptions(user);
+    await user.browser.request('POST', '/api/transfer', { to: 'test-account-1', amount: 1 });
+    await expectError(
+      await submitAddCredential(user, options, new SoftAuthenticator()),
+      401,
+      'step_up_required',
+      'S3',
+    );
     expect((await list(user)).credentials).toHaveLength(1);
   });
 
@@ -93,16 +149,46 @@ describe('adding a passkey', () => {
   it('lets a failed creation start over from options, but one approval adds one passkey', async () => {
     const user = await registerUser(server.baseUrl);
     expect((await stepUp(user, ADD)).status).toBe(200);
-    await addCredentialOptions(user); // the creation for these options is cancelled
-    expect((await addCredential(user)).status).toBe(200);
-    await expectError(await addCredential(user), 401, 'step_up_required', 'S3');
+    const cancelled = await addCredentialOptions(user); // the creation is cancelled
+    const retried = await addCredentialOptions(user);
+    expect((await submitAddCredential(user, retried, new SoftAuthenticator())).status).toBe(200);
+    // The approval is used: neither new options nor the old ones get a second passkey in.
+    await expectError(
+      await user.browser.request('POST', '/api/credentials/options'),
+      401,
+      'step_up_required',
+    );
+    await expectError(
+      await submitAddCredential(user, cancelled, new SoftAuthenticator()),
+      401,
+      'step_up_required',
+      'S3',
+    );
     expect((await list(user)).credentials).toHaveLength(2);
   });
 
-  it('is refused with a transfer approval', async () => {
+  it('refuses options with only a transfer approval', async () => {
     const user = await registerUser(server.baseUrl);
     await stepUp(user, { kind: 'transfer', to: 'test-account-1', amount: 1000 });
-    await expectError(await addCredential(user), 401, 'step_up_required', 'S2');
+    await expectError(
+      await user.browser.request('POST', '/api/credentials/options'),
+      401,
+      'step_up_required',
+    );
+  });
+
+  it('refuses add options issued before another step-up (the session was rotated, C5)', async () => {
+    const user = await registerUser(server.baseUrl);
+    await stepUp(user, ADD);
+    const options = await addCredentialOptions(user);
+    // A transfer step-up replaces the add approval and issues a new session ID.
+    await stepUp(user, { kind: 'transfer', to: 'test-account-1', amount: 1000 });
+    await expectError(
+      await submitAddCredential(user, options, new SoftAuthenticator()),
+      400,
+      'invalid_challenge',
+      'C5',
+    );
   });
 
   it("refuses the attacker's key answering the victim's challenge from the attacker's session (C5)", async () => {
@@ -110,6 +196,7 @@ describe('adding a passkey', () => {
     const attacker = await registerUser(server.baseUrl, 'test-user-2');
     // The attacker holds a valid approval of their own, so only C5 stands in the way.
     expect((await stepUp(attacker, ADD)).status).toBe(200);
+    await stepUp(victim, ADD);
     const leaked = await addCredentialOptions(victim);
     const res = await submitAddCredential(attacker, leaked, new SoftAuthenticator());
     await expectError(res, 400, 'invalid_challenge', 'C5');

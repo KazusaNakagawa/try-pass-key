@@ -160,7 +160,7 @@ ui.passkeyAdd.addEventListener('click', () => {
     .catch((err: unknown) => {
       ui.passkeyResult.textContent =
         `パスキーを作成できませんでした\n${message(err)}\n` +
-        '承認から5分以内なら、もう一度「パスキーを追加」を押すとステップアップなしでやり直せます。' +
+        '承認が残っていれば（承認から4分以内）、もう一度「パスキーを追加」を押すとステップアップなしでやり直せます。' +
         'このユーザーのパスキーがすでにある認証器は選べません。';
       const inspection = inspectionOf(err);
       if (inspection) showInspection(ui.inspector, inspection);

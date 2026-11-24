@@ -49,6 +49,8 @@ export function creationOptions(
     userHandle: Buffer;
     displayName: string;
     excludeCredentials: RegisterOptionsResponse['excludeCredentials'];
+    /** Defaults to the challenge lifetime. */
+    timeoutMs?: number;
   },
 ): RegisterOptionsResponse {
   return {
@@ -60,7 +62,7 @@ export function creationOptions(
     },
     challenge: toBase64Url(input.challenge),
     pubKeyCredParams: SUPPORTED_ALGORITHMS.map((alg) => ({ type: 'public-key', alg })),
-    timeout: CHALLENGE_TTL_MS,
+    timeout: input.timeoutMs ?? CHALLENGE_TTL_MS,
     excludeCredentials: input.excludeCredentials,
     authenticatorSelection: {
       residentKey: 'required',

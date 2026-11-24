@@ -18,7 +18,7 @@ import {
  */
 export function createAddCredentialOptions(
   deps: RegistrationDeps,
-  input: { userId: string; sessionId: string },
+  input: { userId: string; sessionId: string; timeoutMs?: number },
 ): RegisterOptionsResponse {
   const user = deps.db
     .prepare('SELECT user_handle, display_name FROM users WHERE id = ?')
@@ -29,13 +29,15 @@ export function createAddCredentialOptions(
     .all(input.userId) as { id: Uint8Array; transports: string }[];
   const { challenge } = issueChallenge(deps.db, deps.now(), {
     purpose: 'add_credential',
-    ...input,
+    userId: input.userId,
+    sessionId: input.sessionId,
   });
   return creationOptions(deps, {
     challenge,
     // The same user.id, so the new passkey logs in to this account (L2).
     userHandle: Buffer.from(user.user_handle),
     displayName: user.display_name,
+    ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
     // An authenticator that already holds one of them refuses (InvalidStateError)
     // instead of creating a second passkey, or overwriting the first, for this user.
     excludeCredentials: existing.map((row) => ({

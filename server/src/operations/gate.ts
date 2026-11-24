@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { StepupOperation } from '@app/shared';
 import type { OperationGateContext, StepupApproval } from '../webauthn/checks/types.js';
+import { STEPUP_TTL_MS } from '../webauthn/constants.js';
 import { operationHash } from './operation-hash.js';
 
 export interface OperationGateDeps {
@@ -25,6 +26,23 @@ export function buildOperationGateContext(
     consumeApproval: () =>
       approval !== undefined && clearApproval(deps.db, input.sessionId, approval.approvedTxHash),
   };
+}
+
+/**
+ * How long the session's approval for `op` still lasts, in milliseconds; 0 when
+ * there is none, it is for another operation, or it has expired. Reads only:
+ * the gate still consumes it later. Lets adding a passkey refuse before the
+ * authenticator creates anything (D48). Not a §6 check: the gate decides.
+ */
+export function approvalTimeLeft(
+  deps: OperationGateDeps,
+  input: { sessionId: string; op: StepupOperation },
+): number {
+  const approval = readApproval(deps.db, input.sessionId);
+  if (approval?.approvedTxHash !== operationHash(input.op)) return 0;
+  const age = deps.now().getTime() - Date.parse(approval.stepupAt);
+  // An unreadable time (NaN) fails the comparison and counts as expired.
+  return age >= 0 && age < STEPUP_TTL_MS ? STEPUP_TTL_MS - age : 0;
 }
 
 function readApproval(db: DatabaseSync, sessionId: string): StepupApproval | undefined {

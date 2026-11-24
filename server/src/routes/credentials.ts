@@ -14,13 +14,17 @@ import {
   listCredentials,
 } from '../credentials/credentials.js';
 import { HttpError } from '../http/errors.js';
-import { buildOperationGateContext } from '../operations/gate.js';
+import { approvalTimeLeft, buildOperationGateContext } from '../operations/gate.js';
 import { currentSession, requireSession, type SessionDeps } from '../session/http.js';
 import {
   buildAddCredentialContext,
   createAddCredentialOptions,
   saveAddedCredential,
 } from '../webauthn/add-credential.js';
+import {
+  ADD_CREDENTIAL_MARGIN_MS,
+  ADD_CREDENTIAL_MIN_TIME_LEFT_MS,
+} from '../webauthn/constants.js';
 import { runOperationGate } from '../webauthn/pipeline.js';
 import { runInspected } from './inspected.js';
 
@@ -36,11 +40,27 @@ export function credentialRoutes(deps: SessionDeps): Router {
     res.json(body);
   });
 
-  // No gate here: a cancelled or refused creation can start over from options
-  // while the approval lasts. The gate runs in verify, before anything is saved.
+  // The approval is only looked at here, not consumed: a cancelled or refused
+  // creation can start over from options while it lasts, and the gate consumes
+  // it in verify (D44). Refusing here, before the authenticator creates
+  // anything, keeps a passkey from being left on the authenticator when the
+  // approval has gone (expired, or used up by another request) (D48).
   router.post('/api/credentials/options', requireSession(deps), (_req, res) => {
     const session = currentSession(res);
-    res.json(createAddCredentialOptions(deps, { userId: session.userId, sessionId: session.id }));
+    const timeLeft = approvalTimeLeft(deps, {
+      sessionId: session.id,
+      op: { kind: 'add_credential' },
+    });
+    if (timeLeft < ADD_CREDENTIAL_MIN_TIME_LEFT_MS) {
+      throw new HttpError(401, 'step_up_required', 'step up to approve adding a passkey first');
+    }
+    res.json(
+      createAddCredentialOptions(deps, {
+        userId: session.userId,
+        sessionId: session.id,
+        timeoutMs: timeLeft - ADD_CREDENTIAL_MARGIN_MS,
+      }),
+    );
   });
 
   router.post('/api/credentials/verify', requireSession(deps), (req, res) => {

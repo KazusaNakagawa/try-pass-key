@@ -310,7 +310,7 @@ sequenceDiagram
   S-->>B: RequestOptions（allowCredentials = そのユーザーの鍵）
   B->>A: get() で承認
   B->>S: POST /api/stepup/verify → セッションに承認を記録
-  B->>S: POST /api/credentials/options（ゲートなし）
+  B->>S: POST /api/credentials/options（承認を消費せずに確かめる。D48）
   S->>S: purpose add_credential の challenge。行に user_id と session_id
   S-->>B: CreationOptions（user.id = 既存の user_handle、excludeCredentials = 既存の鍵）
   B->>A: create()
@@ -328,7 +328,9 @@ sequenceDiagram
 
 設計上のポイント:
 
-- 追加の承認は verify で消費する。options はゲートを通さないので、作成ダイアログのキャンセルや `excludeCredentials` による拒否の後も、承認から5分以内なら options からやり直せる。ゲートは登録の検証がすべて通った後に置き、壊れた応答で承認を消費させない（D44）。画面は承認から4分30秒を過ぎたらステップアップからやり直す。verify で承認切れと分かった時点では、認証器にはもうパスキーができているため
+- 承認はセッションに1つだけで、どの操作のステップアップでも上書きされ、どの操作のゲートでも消費される（承認なしの送金や削除を試しただけで、待っていた追加の承認は消える）
+- 追加の承認は verify で消費する。作成ダイアログのキャンセルや `excludeCredentials` による拒否の後も、承認が残っていれば options からやり直せる。ゲートは登録の検証がすべて通った後に置き、壊れた応答で承認を消費させない（D44）
+- options は、セッションに追加の承認があり、残りが1分以上あるときだけ出す（消費はしない）。なければ 401 `step_up_required` を返し、画面はステップアップしてから取り直す。WebAuthn の `timeout` は承認の残り時間から30秒引いた値にし、承認より先にブラウザの ceremony が終わるようにする。verify で承認切れと分かった時点では、認証器にはもうパスキーができているため（D48）
 - 追加の challenge は、ステップアップと同じく要求したセッションに縛る（C5）。追加した鍵は、セッションのユーザーではなく challenge の行の `user_id` に保存する。両者は C5 が通れば一致する。行を起点にすると、C5 を外したときの攻撃（漏れた challenge に攻撃者が自分の鍵で答え、自分の承認済みセッションから送ると、攻撃者の鍵が被害者に付く）をテストで再現できる（D45）
 - 追加の options は `user.id` に既存の `user_handle` を使い（追加した鍵でのログインが同じユーザーになる、L2）、`excludeCredentials` に既存の鍵を入れる
 - 削除では、持ち主の確認（404 `credential_not_found`）と最後の1本の確認（409 `last_credential`）をゲートより前に行う。他人の鍵を指定したリクエストで承認を消費させないため。この2つは認可と業務ルールで、6章の検証項目ではない（D46）。最後の1本の確認と削除は1文の DELETE にし、同時に2本消しても1本は残る
