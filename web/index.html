@@ -49,11 +49,42 @@
         <pre id="register-result" aria-live="polite"></pre>
       </section>
 
+      <!-- Logged in only. -->
+      <section id="transfer-section" hidden>
+        <h2>送金（模擬）</h2>
+        <p>残高: <span id="balance">-</span></p>
+        <p>
+          送金の直前にパスキーでもう一度本人確認します（ステップアップ）。承認は5分以内・1回だけ・この送金内容にだけ有効です。
+        </p>
+        <form id="transfer-form">
+          <label>
+            送金先
+            <input id="transfer-to" name="to" required maxlength="64" autocomplete="off" />
+          </label>
+          <label>
+            金額
+            <input
+              id="transfer-amount"
+              name="amount"
+              type="number"
+              required
+              min="1"
+              max="1000000"
+              step="1"
+            />
+          </label>
+          <button type="submit">送金する</button>
+        </form>
+        <pre id="transfer-result" aria-live="polite"></pre>
+        <h3>履歴（新しい順、最大20件）</h3>
+        <ul id="transfer-history"></ul>
+      </section>
+
       <!-- Shown once a verify response carries an inspection (server INSPECTION=on). -->
       <section id="inspector-section" hidden>
         <h2>直近の ceremony</h2>
         <p>
-          登録・ログインでブラウザと認証器が送った値、サーバーの期待値、検証項目（docs/01
+          登録・ログイン・ステップアップでブラウザと認証器が送った値、サーバーの期待値、検証項目（docs/01
           §6）の結果。サーバーで INSPECTION=on のときだけ表示されます。
         </p>
         <div id="inspector" aria-live="polite">まだありません</div>

@@ -1,8 +1,9 @@
-import { HealthResponse, MeResponse } from '@app/shared';
-import { ApiRequestError } from './api.js';
+import { HealthResponse, MeResponse, TransfersResponse } from '@app/shared';
+import { ApiRequestError, getJson } from './api.js';
 import { showInspection } from './inspector.js';
 import { cancelConditionalUI, loginWithPasskey, supportsConditionalUI } from './login.js';
 import { registerPasskey } from './register.js';
+import { transferWithStepUp } from './transfer.js';
 
 /** Looks up a required element and checks its type at runtime. */
 function $<T extends HTMLElement>(selector: string, type: new () => T): T {
@@ -22,7 +23,16 @@ const ui = {
   registerResult: $('#register-result', HTMLPreElement),
   health: $('#health', HTMLPreElement),
   inspector: $('#inspector', HTMLDivElement),
+  transferSection: $('#transfer-section', HTMLElement),
+  balance: $('#balance', HTMLSpanElement),
+  transferForm: $('#transfer-form', HTMLFormElement),
+  transferTo: $('#transfer-to', HTMLInputElement),
+  transferAmount: $('#transfer-amount', HTMLInputElement),
+  transferResult: $('#transfer-result', HTMLPreElement),
+  transferHistory: $('#transfer-history', HTMLUListElement),
 };
+
+const yen = (n: number) => n.toLocaleString('ja-JP');
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -36,6 +46,27 @@ function showMe(me: MeResponse | undefined): void {
     : 'ログインしていません';
   ui.logout.hidden = !me;
   ui.loginSection.hidden = Boolean(me);
+  ui.transferSection.hidden = !me;
+  if (me) void refreshTransfers();
+}
+
+function showTransfers({ balance, transfers }: TransfersResponse): void {
+  ui.balance.textContent = yen(balance);
+  ui.transferHistory.replaceChildren(
+    ...transfers.map((t) => {
+      const li = document.createElement('li');
+      li.textContent = `${new Date(t.createdAt).toLocaleString('ja-JP')}  ${t.to}  ${yen(t.amount)}`;
+      return li;
+    }),
+  );
+}
+
+async function refreshTransfers(): Promise<void> {
+  try {
+    showTransfers(await getJson('/api/transfers', TransfersResponse));
+  } catch (err) {
+    ui.transferResult.textContent = `残高を取得できませんでした\n${message(err)}`;
+  }
 }
 
 async function refreshMe(): Promise<MeResponse | undefined> {
@@ -109,9 +140,30 @@ ui.registerForm.addEventListener('submit', (event) => {
     });
 });
 
+ui.transferForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const tx = { to: ui.transferTo.value, amount: Number(ui.transferAmount.value) };
+  ui.transferResult.textContent = '送金しています...';
+  transferWithStepUp(tx, () => {
+    ui.transferResult.textContent = 'ステップアップが必要です。認証器の操作を待っています...';
+  })
+    .then(async ({ result, stepup }) => {
+      ui.transferResult.textContent = `送金しました\n${JSON.stringify(result, null, 2)}`;
+      if (stepup) showInspection(ui.inspector, stepup.inspection);
+      await refreshMe();
+    })
+    .catch((err: unknown) => {
+      ui.transferResult.textContent = `送金できませんでした\n${message(err)}`;
+      const inspection = inspectionOf(err);
+      if (inspection) showInspection(ui.inspector, inspection);
+      void refreshTransfers();
+    });
+});
+
 ui.logout.addEventListener('click', () => {
   void fetch('/api/logout', { method: 'POST' }).then(async () => {
     ui.loginResult.textContent = '';
+    ui.transferResult.textContent = '';
     conditionalFailures = 0;
     await refreshMe();
     void startConditionalUI();

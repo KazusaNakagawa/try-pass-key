@@ -79,3 +79,22 @@ test('login button: username-less login in a browser without Conditional UI', as
   await expect(page.locator('#inspector')).toContainText('ログイン（受理）');
   await expect(page.locator('#inspector')).toContainText('保存値');
 });
+
+test('transfer: the page steps up with the passkey, then the money moves', async ({ page }) => {
+  await addVirtualAuthenticator(page);
+  await register(page, 'test-user-e2e-3');
+
+  await expect(page.locator('#transfer-section')).toBeVisible();
+  await expect(page.locator('#balance')).toHaveText('100,000');
+  await page.locator('#transfer-to').fill('test-account-1');
+  await page.locator('#transfer-amount').fill('1000');
+  await page.locator('#transfer-form button[type=submit]').click();
+
+  // The first attempt is refused (step_up_required), the passkey approves, the retry goes through.
+  await expect(page.locator('#transfer-result')).toContainText('送金しました');
+  await expect(page.locator('#balance')).toHaveText('99,000');
+  await expect(page.locator('#transfer-history')).toContainText('test-account-1');
+  await expect(page.locator('#inspector')).toContainText('ステップアップ（受理）');
+  await expect(page.locator('#inspector')).toContainText('S1 ✓');
+  await expect(page.locator('#me')).not.toContainText('"stepupAt": null');
+});
