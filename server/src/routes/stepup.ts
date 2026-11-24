@@ -5,9 +5,10 @@ import {
   currentSession,
   requireSession,
   rotateSessionCookie,
+  toMeResponse,
   type SessionDeps,
 } from '../session/http.js';
-import { getBalance } from '../transfer/transfer.js';
+import { getBalance } from '../users.js';
 import { transferTxHash } from '../transfer/tx-hash.js';
 import { buildStepupContext, createStepupOptions, saveStepup } from '../webauthn/stepup.js';
 import { runInspected } from './inspected.js';
@@ -39,13 +40,7 @@ export function stepupRoutes(deps: SessionDeps): Router {
     const session = rotateSessionCookie(deps, req, res, { txHash: saved.txHash });
 
     const body: StepupVerifyResponse = {
-      me: {
-        userId: session.userId,
-        displayName: session.displayName,
-        authAt: session.authAt,
-        stepupAt: session.stepupAt,
-        balance: session.balance,
-      },
+      me: toMeResponse(deps.db, session),
       credential: saved.credential,
       ...(inspection ? { inspection } : {}),
     };

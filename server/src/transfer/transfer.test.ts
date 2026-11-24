@@ -3,7 +3,8 @@ import { expectRejectedBy } from '../../test/expect-check.js';
 import { TransferHarness } from '../../test/transfer-harness.js';
 import { HttpError } from '../http/errors.js';
 import { runChecks, TRANSFER_GATE_CHECKS } from '../webauthn/pipeline.js';
-import { executeTransfer, getBalance, listTransfers } from './transfer.js';
+import { getBalance } from '../users.js';
+import { executeTransfer, listTransfers } from './transfer.js';
 
 const TX = { to: 'test-account-1', amount: 1000 };
 

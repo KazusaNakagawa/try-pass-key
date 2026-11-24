@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { TransferRecord, TransferRequest } from '@app/shared';
 import { HttpError } from '../http/errors.js';
+import { getBalance } from '../users.js';
 import type { TransferApproval, TransferContext } from '../webauthn/checks/types.js';
 import { transferTxHash } from './tx-hash.js';
 
@@ -78,13 +79,6 @@ export function executeTransfer(
     throw err;
   }
   return { transfer, balance: getBalance(db, input.userId) };
-}
-
-export function getBalance(db: DatabaseSync, userId: string): number {
-  const row = db.prepare('SELECT balance FROM users WHERE id = ?').get(userId) as
-    { balance: number } | undefined;
-  if (!row) throw new Error('user not found');
-  return row.balance;
 }
 
 /** Newest first, at most 20. */

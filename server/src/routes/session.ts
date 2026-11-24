@@ -1,19 +1,18 @@
 import { Router } from 'express';
 import type { MeResponse } from '@app/shared';
-import { currentSession, endSession, requireSession, type SessionDeps } from '../session/http.js';
+import {
+  currentSession,
+  endSession,
+  requireSession,
+  toMeResponse,
+  type SessionDeps,
+} from '../session/http.js';
 
 export function sessionRoutes(deps: SessionDeps): Router {
   const router = Router();
 
   router.get('/api/me', requireSession(deps), (_req, res) => {
-    const session = currentSession(res);
-    const body: MeResponse = {
-      userId: session.userId,
-      displayName: session.displayName,
-      authAt: session.authAt,
-      stepupAt: session.stepupAt,
-      balance: session.balance,
-    };
+    const body: MeResponse = toMeResponse(deps.db, currentSession(res));
     res.json(body);
   });
 

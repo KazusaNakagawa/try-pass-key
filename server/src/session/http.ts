@@ -1,8 +1,10 @@
 import type { CookieOptions, Request, RequestHandler, Response } from 'express';
+import type { MeResponse } from '@app/shared';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Config } from '../config.js';
 import { readCookie } from '../http/cookies.js';
 import { HttpError } from '../http/errors.js';
+import { getBalance } from '../users.js';
 import {
   createSession,
   destroySession,
@@ -90,6 +92,17 @@ export function requireSession(deps: SessionDeps): RequestHandler {
     }
     res.locals.session = session;
     next();
+  };
+}
+
+/** GET /api/me body, also returned after login and step-up. The balance is read now. */
+export function toMeResponse(db: DatabaseSync, session: Session): MeResponse {
+  return {
+    userId: session.userId,
+    displayName: session.displayName,
+    authAt: session.authAt,
+    stepupAt: session.stepupAt,
+    balance: getBalance(db, session.userId),
   };
 }
 
