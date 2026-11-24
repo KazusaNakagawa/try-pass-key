@@ -20,7 +20,10 @@ export type CheckId =
   | 'L1'
   | 'L2'
   | 'L3'
-  | 'L4';
+  | 'L4'
+  | 'S1'
+  | 'S2'
+  | 'S3';
 
 export class CheckError extends Error {
   constructor(
@@ -60,6 +63,11 @@ export interface CeremonyContext {
   challengeRow: ChallengeRow | undefined;
   /** Value of the "ceremony" cookie sent with the request, if any. */
   ceremonyId: string | undefined;
+  /**
+   * Step-up only: the user of the session the response was submitted with. C5
+   * binds a step-up challenge to this user instead of the ceremony cookie (D14).
+   */
+  sessionUserId: string | undefined;
   /** Deletes the challenge row. Returns false if it was already gone. */
   consumeChallenge(): boolean;
 }
@@ -96,6 +104,31 @@ export interface AuthenticationContext extends CeremonyContext {
   /** The user that userHandle names. The session is created for this user (L2). */
   userByHandle: UserRecord | undefined;
   signature: Buffer;
+}
+
+/**
+ * A step-up re-authentication (docs/01 §5.3). Same as a login, except the user is
+ * known before the ceremony: the one logged in to the session.
+ */
+export interface StepupContext extends AuthenticationContext {
+  sessionUserId: string;
+}
+
+/** A step-up approval recorded on the session. */
+export interface TransferApproval {
+  stepupAt: string;
+  approvedTxHash: string;
+}
+
+/** What the transfer gate (S3, S2) checks before money moves. */
+export interface TransferContext {
+  /** Hash of the transfer being requested (transferTxHash). */
+  txHash: string;
+  now: Date;
+  /** Takes the session's approval away. Returns it, or undefined if there was none left. */
+  consumeApproval(): TransferApproval | undefined;
+  /** The approval S3 consumed; S2 compares it. */
+  approval: TransferApproval | undefined;
 }
 
 export interface Check<Ctx> {

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { AUTHENTICATION_CHECKS, REGISTRATION_CHECKS, runChecks } from '../src/webauthn/pipeline.js';
+import {
+  AUTHENTICATION_CHECKS,
+  REGISTRATION_CHECKS,
+  runChecks,
+  STEPUP_CHECKS,
+  TRANSFER_GATE_CHECKS,
+} from '../src/webauthn/pipeline.js';
 import { CheckError, type Check, type CheckId } from '../src/webauthn/checks/types.js';
 
 /**
@@ -69,6 +75,49 @@ describe('verification pipeline', () => {
 
     it('consumes the challenge (C4) before any other check', () => {
       expect(AUTHENTICATION_CHECKS[0]?.id).toBe('C4');
+    });
+  });
+
+  describe('step-up', () => {
+    // Login without L2 (userHandle may be absent when allowCredentials is set), plus S1.
+    const STEPUP_ITEMS = [
+      'C1',
+      'C2',
+      'C3',
+      'C4',
+      'C5',
+      'A1',
+      'A2',
+      'A3',
+      'A4',
+      'L1',
+      'L3',
+      'L4',
+      'S1',
+    ];
+
+    it('runs exactly the step-up items from docs/01 §6', () => {
+      const ids = STEPUP_CHECKS.map((c) => c.id);
+      expect(new Set(ids).size).toBe(ids.length);
+      expect([...ids].sort(byId)).toEqual([...STEPUP_ITEMS].sort(byId));
+    });
+
+    it('cannot be modified at runtime', () => {
+      expect(Object.isFrozen(STEPUP_CHECKS)).toBe(true);
+    });
+
+    it('consumes the challenge (C4) before any other check', () => {
+      expect(STEPUP_CHECKS[0]?.id).toBe('C4');
+    });
+  });
+
+  describe('transfer gate', () => {
+    it('runs S3 then S2', () => {
+      expect(TRANSFER_GATE_CHECKS.map((c) => c.id)).toEqual(['S3', 'S2']);
+    });
+
+    it('cannot be modified at runtime', () => {
+      expect(Object.isFrozen(TRANSFER_GATE_CHECKS)).toBe(true);
     });
   });
 

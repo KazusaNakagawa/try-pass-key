@@ -24,7 +24,16 @@ const CHECK_ERROR_CODES: Record<CheckId, string> = {
   L2: 'user_handle_mismatch',
   L3: 'signature_invalid',
   L4: 'backup_flags_mismatch',
+  S1: 'credential_not_owned',
+  // The client recovers by stepping up again for this transfer.
+  S2: 'step_up_required',
+  S3: 'step_up_required',
 };
+
+/** HTTP status per check: 401 where stepping up again fixes it, otherwise 400. */
+export function checkErrorStatus(id: CheckId): number {
+  return id === 'S2' || id === 'S3' ? 401 : 400;
+}
 
 export class HttpError extends Error {
   constructor(
@@ -51,7 +60,7 @@ export const errorHandler: ErrorRequestHandler = (err: unknown, _req, res, _next
 
   if (err instanceof CheckError) {
     console.warn(`[verify] rejected by ${err.message}`);
-    send(400, {
+    send(checkErrorStatus(err.check), {
       error: CHECK_ERROR_CODES[err.check],
       detail: err.message,
       check: err.check,

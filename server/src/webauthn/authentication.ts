@@ -83,6 +83,7 @@ export function buildAuthenticationContext(
     },
     challengeRow,
     ceremonyId: input.ceremonyId,
+    sessionUserId: undefined,
     consumeChallenge: () => (challengeRow ? consumeChallenge(deps.db, challengeRow.id) : false),
   };
 }
