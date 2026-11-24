@@ -7,7 +7,8 @@ import {
   createLoginOptions,
   saveAuthentication,
 } from '../webauthn/authentication.js';
-import { AUTHENTICATION_CHECKS, runChecks } from '../webauthn/pipeline.js';
+import { AUTHENTICATION_CHECKS } from '../webauthn/pipeline.js';
+import { runInspected } from './inspected.js';
 
 export function loginRoutes(deps: SessionDeps): Router {
   const router = Router();
@@ -24,8 +25,17 @@ export function loginRoutes(deps: SessionDeps): Router {
     res.clearCookie(CEREMONY_COOKIE, { ...ceremonyCookieOptions(deps.config), maxAge: undefined });
 
     const ctx = buildAuthenticationContext(deps, { response, ceremonyId });
-    runChecks(ctx, AUTHENTICATION_CHECKS);
-    const { user, credential } = saveAuthentication(deps, ctx);
+    const {
+      saved: { user, credential },
+      inspection,
+    } = runInspected({
+      ceremony: 'login',
+      ctx,
+      checks: AUTHENTICATION_CHECKS,
+      config: deps.config,
+      res,
+      save: () => saveAuthentication(deps, ctx),
+    });
     const session = startSession(deps, req, res, user);
 
     const body: LoginVerifyResponse = {
@@ -36,6 +46,7 @@ export function loginRoutes(deps: SessionDeps): Router {
         stepupAt: session.stepupAt,
       },
       credential,
+      ...(inspection ? { inspection } : {}),
     };
     res.json(body);
   });

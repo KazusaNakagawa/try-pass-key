@@ -1,13 +1,14 @@
 import type { AddressInfo } from 'node:net';
 import type { DatabaseSync } from 'node:sqlite';
 import { createApp } from '../src/app.js';
+import type { Config } from '../src/config.js';
 import { openDb } from '../src/db.js';
 import { TEST_CONFIG } from './registration-harness.js';
 
 /** Starts the real app on a random port. A tiny cookie jar plays the browser. */
-export async function startTestServer() {
+export async function startTestServer(config: Config = TEST_CONFIG) {
   const db: DatabaseSync = openDb(':memory:');
-  const app = createApp({ db, config: TEST_CONFIG });
+  const app = createApp({ db, config });
   const { baseUrl, close } = await new Promise<{ baseUrl: string; close: () => void }>(
     (resolve) => {
       const server = app.listen(0, () => {
