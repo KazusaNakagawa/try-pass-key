@@ -13,12 +13,15 @@ export const S3: Check<TransferContext> = {
   id: 'S3',
   title: 'step-up approval exists, is fresh, and is used once',
   run(ctx) {
-    ctx.approval = ctx.consumeApproval();
-    if (!ctx.approval) {
+    const { approval } = ctx;
+    if (!approval) {
       throw new CheckError('S3', 'no step-up approval (never approved, or already used)');
     }
+    if (!ctx.consumeApproval()) {
+      throw new CheckError('S3', 'step-up approval was used by another request');
+    }
     // Written so that an unreadable time (NaN) fails every comparison and is rejected.
-    const age = ctx.now.getTime() - Date.parse(ctx.approval.stepupAt);
+    const age = ctx.now.getTime() - Date.parse(approval.stepupAt);
     if (!(age >= 0 && age < STEPUP_TTL_MS)) {
       throw new CheckError('S3', 'step-up approval has expired or has no valid time');
     }

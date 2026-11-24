@@ -36,7 +36,7 @@ const scenarios: Scenario[] = [
     run: (checks) => {
       const h = new TransferHarness();
       h.approve(TX);
-      runChecks(h.gateContext({ ...TX, amount: 9000 }), checks);
+      runChecks(h.context({ ...TX, amount: 9000 }), checks);
     },
   },
   {
@@ -47,7 +47,7 @@ const scenarios: Scenario[] = [
       const h = new TransferHarness();
       h.approve(TX);
       h.clock = new Date(h.clock.getTime() + STEPUP_TTL_MS + 1000);
-      runChecks(h.gateContext(TX), checks);
+      runChecks(h.context(TX), checks);
     },
   },
   {
@@ -57,8 +57,8 @@ const scenarios: Scenario[] = [
     run: (checks) => {
       const h = new TransferHarness();
       h.approve(TX);
-      runChecks(h.gateContext(TX), checks);
-      runChecks(h.gateContext(TX), checks);
+      runChecks(h.context(TX), checks);
+      runChecks(h.context(TX), checks);
     },
   },
   {
@@ -69,7 +69,7 @@ const scenarios: Scenario[] = [
     withoutCheckRejectedBy: 'S2',
     run: (checks) => {
       const h = new TransferHarness();
-      runChecks(h.gateContext(TX), checks);
+      runChecks(h.context(TX), checks);
     },
   },
 ];
@@ -97,7 +97,7 @@ describe('transfer gate attacks', () => {
     h.clock = new Date(h.clock.getTime() + STEPUP_TTL_MS - 1000);
     expect(
       rejection(() => {
-        runChecks(h.gateContext(TX), TRANSFER_GATE_CHECKS);
+        runChecks(h.context(TX), TRANSFER_GATE_CHECKS);
       }),
     ).toBeUndefined();
   });

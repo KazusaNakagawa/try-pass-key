@@ -8,20 +8,23 @@ import { executeTransfer, getBalance, listTransfers } from './transfer.js';
 const TX = { to: 'test-account-1', amount: 1000 };
 
 describe('transfer approval', () => {
-  it('is consumed once', () => {
+  it('is loaded when the context is built and consumed once', () => {
     const h = new TransferHarness();
     h.approve(TX);
     const ctx = h.context(TX);
-    expect(ctx.consumeApproval()).toMatchObject({ stepupAt: h.clock.toISOString() });
-    expect(h.context(TX).consumeApproval()).toBeUndefined();
+    expect(ctx.approval).toMatchObject({ stepupAt: h.clock.toISOString() });
+    expect(ctx.consumeApproval()).toBe(true);
+    expect(h.context(TX).approval).toBeUndefined();
   });
 
   it('lets only one of two concurrent transfers through the gate', () => {
     const h = new TransferHarness();
     h.approve(TX);
-    // Both requests arrive before either has run the gate.
+    // Both requests loaded the approval before either ran the gate. Only the
+    // conditional UPDATE keeps the second from spending it too.
     const first = h.context(TX);
     const second = h.context(TX);
+    expect(second.approval).toBeDefined();
     runChecks(first, TRANSFER_GATE_CHECKS);
     expectRejectedBy(() => {
       runChecks(second, TRANSFER_GATE_CHECKS);
@@ -31,7 +34,7 @@ describe('transfer approval', () => {
   it('is not usable when stepup_at is missing', () => {
     const h = new TransferHarness();
     h.db.prepare("UPDATE sessions SET approved_tx_hash = 'x', stepup_at = NULL").run();
-    expect(h.context(TX).consumeApproval()).toBeUndefined();
+    expect(h.context(TX).approval).toBeUndefined();
   });
 });
 

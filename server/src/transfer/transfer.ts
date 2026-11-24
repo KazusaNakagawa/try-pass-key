@@ -10,37 +10,43 @@ export interface TransferDeps {
   now: () => Date;
 }
 
-/** What the transfer gate (TRANSFER_GATE_CHECKS) checks for one request. */
+/**
+ * What the transfer gate (TRANSFER_GATE_CHECKS) checks for one request. The
+ * approval is read here; S3 consumes it only if it is still the value read.
+ */
 export function buildTransferContext(
   deps: TransferDeps,
   input: { sessionId: string; tx: TransferRequest },
 ): TransferContext {
+  const approval = readApproval(deps.db, input.sessionId);
   return {
     txHash: transferTxHash(input.tx),
     now: deps.now(),
-    approval: undefined,
-    consumeApproval: () => consumeApproval(deps.db, input.sessionId),
+    approval,
+    consumeApproval: () =>
+      approval !== undefined && clearApproval(deps.db, input.sessionId, approval.approvedTxHash),
   };
 }
 
-/**
- * Takes the approval off the session. Read, then clear only if it is still the
- * value read: of two concurrent transfers, only the one whose UPDATE changes the
- * row may use it. (UPDATE ... RETURNING would return the cleared NULL, not the
- * approval.)
- */
-function consumeApproval(db: DatabaseSync, sessionId: string): TransferApproval | undefined {
+function readApproval(db: DatabaseSync, sessionId: string): TransferApproval | undefined {
   const row = db
     .prepare('SELECT stepup_at, approved_tx_hash FROM sessions WHERE id = ?')
     .get(sessionId) as { stepup_at: string | null; approved_tx_hash: string | null } | undefined;
-  if (!row?.approved_tx_hash) return undefined;
-  const cleared = db
-    .prepare('UPDATE sessions SET approved_tx_hash = NULL WHERE id = ? AND approved_tx_hash = ?')
-    .run(sessionId, row.approved_tx_hash);
-  if (Number(cleared.changes) === 0) return undefined;
   // Without a time, S3 could not tell its age: treat it as no approval at all.
-  if (!row.stepup_at) return undefined;
+  if (!row?.approved_tx_hash || !row.stepup_at) return undefined;
   return { stepupAt: row.stepup_at, approvedTxHash: row.approved_tx_hash };
+}
+
+/**
+ * Clears the approval only if it is still the value read: of two concurrent
+ * transfers, only the one whose UPDATE changes the row may use it.
+ * (UPDATE ... RETURNING would return the cleared NULL, not the approval.)
+ */
+function clearApproval(db: DatabaseSync, sessionId: string, approvedTxHash: string): boolean {
+  const result = db
+    .prepare('UPDATE sessions SET approved_tx_hash = NULL WHERE id = ? AND approved_tx_hash = ?')
+    .run(sessionId, approvedTxHash);
+  return Number(result.changes) === 1;
 }
 
 /** Moves the money once the gate passed. Debit and record are one transaction. */

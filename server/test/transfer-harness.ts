@@ -42,20 +42,4 @@ export class TransferHarness {
   context(tx: TransferRequest): TransferContext {
     return buildTransferContext(this.deps, { sessionId: this.sessionId, tx });
   }
-
-  /**
-   * The production context with the session's approval already read (not
-   * consumed) into `approval`, so S2 still has something to compare once S3 is
-   * removed. With S3 present, S3 overwrites it with what it consumed.
-   */
-  gateContext(tx: TransferRequest): TransferContext {
-    const ctx = this.context(tx);
-    const row = this.db
-      .prepare('SELECT stepup_at, approved_tx_hash FROM sessions WHERE id = ?')
-      .get(this.sessionId) as { stepup_at: string | null; approved_tx_hash: string | null };
-    if (row.stepup_at && row.approved_tx_hash) {
-      ctx.approval = { stepupAt: row.stepup_at, approvedTxHash: row.approved_tx_hash };
-    }
-    return ctx;
-  }
 }

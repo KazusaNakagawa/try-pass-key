@@ -125,10 +125,13 @@ export interface TransferContext {
   /** Hash of the transfer being requested (transferTxHash). */
   txHash: string;
   now: Date;
-  /** Takes the session's approval away. Returns it, or undefined if there was none left. */
-  consumeApproval(): TransferApproval | undefined;
-  /** The approval S3 consumed; S2 compares it. */
+  /** The session's approval, read when the context was built. */
   approval: TransferApproval | undefined;
+  /**
+   * Takes that approval off the session, only if it is still there unchanged.
+   * False when another request used it first.
+   */
+  consumeApproval(): boolean;
 }
 
 export interface Check<Ctx> {

@@ -7,8 +7,8 @@ function context(txHash: string, approval: TransferApproval | undefined): Transf
   return {
     txHash,
     now: new Date('2026-01-01T00:00:00Z'),
-    consumeApproval: () => undefined,
     approval,
+    consumeApproval: () => true,
   };
 }
 
@@ -31,5 +31,12 @@ describe('S2 transfer matches the approved transaction', () => {
     expectRejectedBy(() => {
       S2.run(context('approved', undefined));
     }, 'S2');
+  });
+
+  it('does not depend on S3 having run first', () => {
+    // The approval is loaded when the context is built, not handed over by S3.
+    expect(() => {
+      S2.run(context('approved', approval));
+    }).not.toThrow();
   });
 });

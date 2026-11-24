@@ -97,8 +97,8 @@ export const STEPUP_CHECKS: readonly Check<StepupContext>[] = Object.freeze([
 ]);
 
 /**
- * Checked before a transfer moves money. S3 consumes the approval first, then S2
- * compares it, so a transfer that S2 rejects still uses the approval up.
+ * Checked before a transfer moves money. Both read the approval loaded with the
+ * context; S3 consumes it first, so a transfer that S2 rejects still uses it up.
  */
 export const TRANSFER_GATE_CHECKS: readonly Check<TransferContext>[] = Object.freeze([S3, S2]);
 
