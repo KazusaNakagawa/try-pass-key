@@ -11,13 +11,14 @@ interface DbChallengeRow {
   display_name: string | null;
   user_id: string | null;
   tx_hash: string | null;
+  session_id: string | null;
   expires_at: string;
 }
 
 export type ChallengeInput =
   | { purpose: 'register'; userHandle: Buffer; displayName: string }
   | { purpose: 'login' }
-  | { purpose: 'stepup'; userId: string; txHash: string };
+  | { purpose: 'stepup'; userId: string; sessionId: string; txHash: string };
 
 export function issueChallenge(
   db: DatabaseSync,
@@ -29,8 +30,8 @@ export function issueChallenge(
   const expiresAt = new Date(now.getTime() + CHALLENGE_TTL_MS).toISOString();
   db.prepare(
     `INSERT INTO challenges
-       (id, challenge, purpose, user_handle, display_name, user_id, tx_hash, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, challenge, purpose, user_handle, display_name, user_id, tx_hash, session_id, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     challenge,
@@ -39,6 +40,7 @@ export function issueChallenge(
     input.purpose === 'register' ? input.displayName : null,
     input.purpose === 'stepup' ? input.userId : null,
     input.purpose === 'stepup' ? input.txHash : null,
+    input.purpose === 'stepup' ? input.sessionId : null,
     expiresAt,
   );
   return { id, challenge };
@@ -56,6 +58,7 @@ export function findChallenge(db: DatabaseSync, challenge: Buffer): ChallengeRow
     displayName: row.display_name,
     userId: row.user_id,
     txHash: row.tx_hash,
+    sessionId: row.session_id,
     expiresAt: row.expires_at,
   };
 }

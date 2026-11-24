@@ -78,16 +78,14 @@ const scenarios: Scenario[] = [
   },
   {
     check: 'C5',
-    attack: "the victim's leaked step-up response is submitted in the attacker's session",
+    attack:
+      'a leaked step-up response is redeemed in another session of the same user (a stolen cookie)',
     rejectedBy: 'C5',
-    // The credential is the victim's, not the session user's.
-    withoutCheckRejectedBy: 'S1',
     run: (checks) => {
       const h = new StepupHarness();
-      const victim = h.register('test-user-1');
-      const attacker = h.register('test-user-2');
-      const response = h.stepupResponse(h.beginStepup(victim), victim);
-      runChecks(h.stepupContext(response, attacker.userId), checks);
+      const victim = h.register();
+      const response = h.stepupResponse(h.beginStepup(victim, TX, 'session-a'), victim);
+      runChecks(h.stepupContext(response, victim.userId, 'session-b'), checks);
     },
   },
   simple('A1', 'a signature from a credential scoped to another RP ID', { rpId: 'evil.example' }),
@@ -210,6 +208,19 @@ describe('step-up attacks', () => {
     expect(ctx.credential?.userId).toBe(attacker.userId);
     // The approval would be recorded on the victim's session for the victim's transfer.
     expect(saveStepup(h.deps, ctx).txHash).toBe(transferTxHash(TX));
+  });
+
+  it("C5 also rejects the victim's response in another user's session (S1 would too)", () => {
+    const h = new StepupHarness();
+    const victim = h.register('test-user-1');
+    const attacker = h.register('test-user-2');
+    const response = h.stepupResponse(h.beginStepup(victim), victim);
+    const ctx = h.stepupContext(response, attacker.userId);
+    expect(
+      rejection(() => {
+        runChecks(ctx, STEPUP_CHECKS);
+      }),
+    ).toBe('C5');
   });
 
   it('C2 rejects a login challenge answered as a step-up', () => {

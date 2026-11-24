@@ -32,42 +32,42 @@ describe('C5 challenge bound to the requesting browser', () => {
   });
 });
 
-describe('C5 for step-up: challenge bound to the session user', () => {
-  /** A step-up context: the row was issued for `rowUserId`, the request comes from `sessionUserId`. */
-  function stepupContext(rowUserId: string | null, sessionUserId: string | undefined) {
+describe('C5 for step-up: challenge bound to the session that asked for it', () => {
+  /** The row was issued to session `rowSessionId`; the response arrives with `sessionId`. */
+  function stepupContext(rowSessionId: string | null, sessionId: string | undefined) {
     const h = new LoginHarness();
     const ctx = h.validLoginContext(h.register());
     if (!ctx.challengeRow) throw new Error('harness issued no challenge');
     return {
       ...ctx,
       expected: { ...ctx.expected, purpose: 'stepup' as const },
-      challengeRow: { ...ctx.challengeRow, purpose: 'stepup' as const, userId: rowUserId },
+      challengeRow: { ...ctx.challengeRow, purpose: 'stepup' as const, sessionId: rowSessionId },
       ceremonyId: undefined,
-      sessionUserId,
+      sessionId,
     };
   }
 
-  it('accepts without a ceremony cookie when the row was issued to the session user', () => {
+  it('accepts without a ceremony cookie when the row was issued to this session', () => {
     expect(() => {
-      C5.run(stepupContext('u1', 'u1'));
+      C5.run(stepupContext('session-a', 'session-a'));
     }).not.toThrow();
   });
 
-  it("rejects a challenge issued to another user's session", () => {
+  it("rejects a challenge issued to another session, even the same user's", () => {
     expectRejectedBy(() => {
-      C5.run(stepupContext('victim', 'attacker'));
+      C5.run(stepupContext('session-a', 'session-b'));
     }, 'C5');
   });
 
-  it('rejects when there is no session user', () => {
+  it('rejects when there is no session', () => {
     expectRejectedBy(() => {
-      C5.run(stepupContext('u1', undefined));
+      C5.run(stepupContext('session-a', undefined));
     }, 'C5');
   });
 
-  it('rejects a row without a user', () => {
+  it('rejects a row without a session', () => {
     expectRejectedBy(() => {
-      C5.run(stepupContext(null, 'u1'));
+      C5.run(stepupContext(null, 'session-a'));
     }, 'C5');
   });
 });

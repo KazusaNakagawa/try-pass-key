@@ -24,12 +24,19 @@ export function stepupRoutes(deps: SessionDeps): Router {
     if (getBalance(deps.db, session.userId) < tx.amount) {
       throw new HttpError(400, 'insufficient_funds', 'the balance is not enough for this transfer');
     }
-    res.json(createStepupOptions(deps, { userId: session.userId, txHash: transferTxHash(tx) }));
+    res.json(
+      createStepupOptions(deps, {
+        userId: session.userId,
+        sessionId: session.id,
+        txHash: transferTxHash(tx),
+      }),
+    );
   });
 
   router.post('/api/stepup/verify', requireSession(deps), (req, res) => {
     const response = AuthenticationResponse.parse(req.body);
-    const ctx = buildStepupContext(deps, { response, sessionUserId: currentSession(res).userId });
+    const { userId, id } = currentSession(res);
+    const ctx = buildStepupContext(deps, { response, sessionUserId: userId, sessionId: id });
     const { saved, inspection } = runInspected({
       ceremony: 'stepup',
       ctx,

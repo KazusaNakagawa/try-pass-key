@@ -12,7 +12,11 @@ function stepupContext(
   signer: RegisteredUser,
   overrides: AssertionOverrides = {},
 ): StepupContext {
-  return { ...h.validLoginContext(signer, overrides), sessionUserId: sessionUser.userId };
+  return {
+    ...h.validLoginContext(signer, overrides),
+    sessionUserId: sessionUser.userId,
+    sessionId: 'session-a',
+  };
 }
 
 describe('S1 credential belongs to the session user', () => {

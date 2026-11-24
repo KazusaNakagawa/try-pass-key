@@ -55,6 +55,7 @@ export function buildAuthenticationContext(
     purpose: 'login',
     ceremonyId: input.ceremonyId,
     sessionUserId: undefined,
+    sessionId: undefined,
   });
 }
 
@@ -66,8 +67,13 @@ export function buildAssertionContext(
   deps: AuthenticationDeps,
   response: AuthenticationResponse,
   binding:
-    | { purpose: 'login'; ceremonyId: string | undefined; sessionUserId: undefined }
-    | { purpose: 'stepup'; ceremonyId: undefined; sessionUserId: string },
+    | {
+        purpose: 'login';
+        ceremonyId: string | undefined;
+        sessionUserId: undefined;
+        sessionId: undefined;
+      }
+    | { purpose: 'stepup'; ceremonyId: undefined; sessionUserId: string; sessionId: string },
 ): AuthenticationContext {
   const clientData = parseClientDataJSON(response.response.clientDataJSON);
   const challengeRow = findChallenge(deps.db, clientData.challenge);
@@ -101,6 +107,7 @@ export function buildAssertionContext(
     challengeRow,
     ceremonyId: binding.ceremonyId,
     sessionUserId: binding.sessionUserId,
+    sessionId: binding.sessionId,
     consumeChallenge: () => (challengeRow ? consumeChallenge(deps.db, challengeRow.id) : false),
   };
 }

@@ -11,12 +11,12 @@ import { CHALLENGE_TTL_MS } from './constants.js';
 
 /**
  * Step-up re-authentication before a transfer (docs/01 §5.3). The challenge row
- * remembers whose session asked (C5) and which transaction is being approved
+ * remembers which session asked (C5, D40) and which transaction is being approved
  * (S2, through the session after verify). No ceremony cookie: the session binds it.
  */
 export function createStepupOptions(
   deps: AuthenticationDeps,
-  input: { userId: string; txHash: string },
+  input: { userId: string; sessionId: string; txHash: string },
 ): StepupOptionsResponse {
   const { challenge } = issueChallenge(deps.db, deps.now(), { purpose: 'stepup', ...input });
   const rows = deps.db
@@ -38,15 +38,17 @@ export function createStepupOptions(
 
 export function buildStepupContext(
   deps: AuthenticationDeps,
-  input: { response: AuthenticationResponse; sessionUserId: string },
+  input: { response: AuthenticationResponse; sessionUserId: string; sessionId: string },
 ): StepupContext {
-  const ctx = buildAssertionContext(deps, input.response, {
+  // buildAssertionContext sets both session fields for purpose 'stepup'. Narrowed
+  // by assertion rather than copied: spreading would read the lazy getters
+  // before C4 runs.
+  return buildAssertionContext(deps, input.response, {
     purpose: 'stepup',
     ceremonyId: undefined,
     sessionUserId: input.sessionUserId,
-  });
-  // Returned as is: spreading would read the lazy getters before C4 runs.
-  return Object.assign(ctx, { sessionUserId: input.sessionUserId });
+    sessionId: input.sessionId,
+  }) as StepupContext;
 }
 
 /**

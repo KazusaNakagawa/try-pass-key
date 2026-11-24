@@ -7,11 +7,18 @@ import type { AssertionOverrides, SoftAuthenticator } from './soft-authenticator
 
 export const TX: TransferRequest = { to: 'test-account-1', amount: 1000 };
 
+/** Stand-in session ID (the hash of a session token) for a user's usual session. */
+export const sessionOf = (userId: string) => `session-of-${userId}`;
+
 /** Step-up ceremonies for users registered through the real pipeline. */
 export class StepupHarness extends LoginHarness {
-  /** Options issued to `user`'s session for `tx`. */
-  beginStepup(user: RegisteredUser, tx: TransferRequest = TX) {
-    return createStepupOptions(this.deps, { userId: user.userId, txHash: transferTxHash(tx) });
+  /** Options issued to one of `user`'s sessions (by default "their" session) for `tx`. */
+  beginStepup(user: RegisteredUser, tx: TransferRequest = TX, sessionId = sessionOf(user.userId)) {
+    return createStepupOptions(this.deps, {
+      userId: user.userId,
+      sessionId,
+      txHash: transferTxHash(tx),
+    });
   }
 
   stepupResponse(
@@ -31,10 +38,16 @@ export class StepupHarness extends LoginHarness {
     );
   }
 
-  stepupContext(response: AuthenticationResponse, sessionUserId: string): StepupContext {
+  /** The response submitted in session `sessionId` of `sessionUserId`. */
+  stepupContext(
+    response: AuthenticationResponse,
+    sessionUserId: string,
+    sessionId = sessionOf(sessionUserId),
+  ): StepupContext {
     return buildStepupContext(this.deps, {
       response: AuthenticationResponse.parse(response),
       sessionUserId,
+      sessionId,
     });
   }
 

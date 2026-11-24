@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ApiError, MeResponse, StepupOptionsResponse, StepupVerifyResponse } from '@app/shared';
 import { registerUser, stepUp } from '../../test/api-helpers.js';
+import { TEST_CONFIG } from '../../test/registration-harness.js';
 import { Browser, startTestServer } from '../../test/test-server.js';
+import { createSession } from '../session/sessions.js';
 
 let server: Awaited<ReturnType<typeof startTestServer>>;
 beforeAll(async () => {
@@ -70,6 +72,28 @@ describe('POST /api/stepup/verify', () => {
   it('accepts a response without userHandle', async () => {
     const user = await registerUser(server.baseUrl);
     expect((await stepUp(user, TX, { userHandle: null })).status).toBe(200);
+  });
+
+  it("rejects a step-up response redeemed in the same user's other session (C5)", async () => {
+    const user = await registerUser(server.baseUrl);
+    // A second session of the same user, e.g. a stolen cookie.
+    const other = new Browser(server.baseUrl);
+    other.cookies.set(
+      'session',
+      createSession(server.db, { id: user.userId, displayName: 'test-user-1' }, new Date()).token,
+    );
+    const options = StepupOptionsResponse.parse(
+      await (await user.browser.request('POST', '/api/stepup/options', TX)).json(),
+    );
+    const leaked = user.authenticator.getAssertion({
+      challenge: options.challenge,
+      origin: TEST_CONFIG.rpOrigin,
+      rpId: options.rpId,
+      userHandle: user.userHandle,
+    });
+    const res = await other.request('POST', '/api/stepup/verify', leaked);
+    expect(res.status).toBe(400);
+    expect(ApiError.parse(await res.json())).toMatchObject({ check: 'C5' });
   });
 
   it("rejects the attacker's own passkey in the victim's session (S1)", async () => {

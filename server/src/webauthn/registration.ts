@@ -124,6 +124,7 @@ export function buildRegistrationContext(
     challengeRow,
     ceremonyId: input.ceremonyId,
     sessionUserId: undefined,
+    sessionId: undefined,
     consumeChallenge: () => (challengeRow ? consumeChallenge(deps.db, challengeRow.id) : false),
     isCredentialRegistered: (id) =>
       deps.db.prepare('SELECT 1 FROM credentials WHERE id = ?').get(id) !== undefined,

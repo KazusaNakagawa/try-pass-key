@@ -45,6 +45,8 @@ export interface ChallengeRow {
   displayName: string | null;
   userId: string | null;
   txHash: string | null;
+  /** Step-up only: the session that asked for the challenge. */
+  sessionId: string | null;
   expiresAt: string;
 }
 
@@ -63,11 +65,13 @@ export interface CeremonyContext {
   challengeRow: ChallengeRow | undefined;
   /** Value of the "ceremony" cookie sent with the request, if any. */
   ceremonyId: string | undefined;
-  /**
-   * Step-up only: the user of the session the response was submitted with. C5
-   * binds a step-up challenge to this user instead of the ceremony cookie (D14).
-   */
+  /** Step-up only: the user of the session the response was submitted with (S1). */
   sessionUserId: string | undefined;
+  /**
+   * Step-up only: the session the response was submitted with (its ID, the token
+   * hash). C5 binds a step-up challenge to it instead of the ceremony cookie (D40).
+   */
+  sessionId: string | undefined;
   /** Deletes the challenge row. Returns false if it was already gone. */
   consumeChallenge(): boolean;
 }
@@ -112,6 +116,7 @@ export interface AuthenticationContext extends CeremonyContext {
  */
 export interface StepupContext extends AuthenticationContext {
   sessionUserId: string;
+  sessionId: string;
 }
 
 /** A step-up approval recorded on the session. */
