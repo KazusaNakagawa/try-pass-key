@@ -26,6 +26,7 @@ const ui = {
   transferSection: $('#transfer-section', HTMLElement),
   balance: $('#balance', HTMLSpanElement),
   transferForm: $('#transfer-form', HTMLFormElement),
+  transferSubmit: $('#transfer-form button[type=submit]', HTMLButtonElement),
   transferTo: $('#transfer-to', HTMLInputElement),
   transferAmount: $('#transfer-amount', HTMLInputElement),
   transferResult: $('#transfer-result', HTMLPreElement),
@@ -143,20 +144,31 @@ ui.registerForm.addEventListener('submit', (event) => {
 ui.transferForm.addEventListener('submit', (event) => {
   event.preventDefault();
   const tx = { to: ui.transferTo.value, amount: Number(ui.transferAmount.value) };
+  // One transfer at a time: a second submit would start a second step-up whose
+  // ceremony aborts the first and whose session rotation races it.
+  ui.transferSubmit.disabled = true;
   ui.transferResult.textContent = '送金しています...';
-  transferWithStepUp(tx, () => {
-    ui.transferResult.textContent = 'ステップアップが必要です。認証器の操作を待っています...';
+  transferWithStepUp(tx, {
+    onStepUp: () => {
+      ui.transferResult.textContent = 'ステップアップが必要です。認証器の操作を待っています...';
+    },
+    onApproved: (stepup) => {
+      showInspection(ui.inspector, stepup.inspection);
+    },
   })
-    .then(async ({ result, stepup }) => {
+    .then(async (result) => {
       ui.transferResult.textContent = `送金しました\n${JSON.stringify(result, null, 2)}`;
-      if (stepup) showInspection(ui.inspector, stepup.inspection);
       await refreshMe();
     })
-    .catch((err: unknown) => {
+    .catch(async (err: unknown) => {
       ui.transferResult.textContent = `送金できませんでした\n${message(err)}`;
+      // A rejected step-up carries its inspection; a failed transfer does not.
       const inspection = inspectionOf(err);
       if (inspection) showInspection(ui.inspector, inspection);
-      void refreshTransfers();
+      await refreshMe();
+    })
+    .finally(() => {
+      ui.transferSubmit.disabled = false;
     });
 });
 

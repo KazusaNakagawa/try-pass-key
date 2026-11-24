@@ -98,3 +98,47 @@ test('transfer: the page steps up with the passkey, then the money moves', async
   await expect(page.locator('#inspector')).toContainText('S1 ✓');
   await expect(page.locator('#me')).not.toContainText('"stepupAt": null');
 });
+
+test('transfer: the form cannot be submitted again while a step-up is running', async ({
+  page,
+}) => {
+  await addVirtualAuthenticator(page);
+  await register(page, 'test-user-e2e-4');
+  const submit = page.locator('#transfer-form button[type=submit]');
+  let disabledDuringStepUp: boolean | undefined;
+  await page.route('**/api/stepup/options', async (route) => {
+    disabledDuringStepUp = await submit.isDisabled();
+    await route.continue();
+  });
+
+  await page.locator('#transfer-to').fill('test-account-1');
+  await page.locator('#transfer-amount').fill('1000');
+  await submit.click();
+  await expect(page.locator('#transfer-result')).toContainText('送金しました');
+  expect(disabledDuringStepUp).toBe(true);
+  await expect(submit).toBeEnabled();
+});
+
+test('transfer: the step-up shows in the inspector even if the transfer then fails', async ({
+  page,
+}) => {
+  await addVirtualAuthenticator(page);
+  await register(page, 'test-user-e2e-5');
+  let transfers = 0;
+  await page.route('**/api/transfer', async (route) => {
+    transfers++;
+    // Let the first attempt reach the server (step_up_required); fail the retry.
+    if (transfers === 1) return route.continue();
+    return route.fulfill({
+      status: 400,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'insufficient_funds', detail: 'simulated' }),
+    });
+  });
+
+  await page.locator('#transfer-to').fill('test-account-1');
+  await page.locator('#transfer-amount').fill('1000');
+  await page.locator('#transfer-form button[type=submit]').click();
+  await expect(page.locator('#transfer-result')).toContainText('送金できませんでした');
+  await expect(page.locator('#inspector')).toContainText('ステップアップ（受理）');
+});
