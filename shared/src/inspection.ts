@@ -53,6 +53,14 @@ export const CeremonyInspection = z.object({
     .optional(),
   /** Every check in pipeline order. */
   checks: z.array(z.object({ id: z.string(), result: CheckResult })),
-  failure: z.object({ check: z.string().optional(), message: z.string() }).optional(),
+  failure: z
+    .object({
+      /** The check that rejected the response, or the one running when decoding failed. */
+      check: z.string().optional(),
+      /** 'check': a §6 item rejected it. 'malformed': the response could not be decoded. */
+      kind: z.enum(['check', 'malformed']),
+      message: z.string(),
+    })
+    .optional(),
 });
 export type CeremonyInspection = z.infer<typeof CeremonyInspection>;

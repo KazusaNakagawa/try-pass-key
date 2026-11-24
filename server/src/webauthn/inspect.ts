@@ -55,6 +55,7 @@ export function inspectCeremony(input: InspectInput): CeremonyInspection {
       ? undefined
       : {
           check: input.failure instanceof CheckError ? input.failure.check : failedCheck,
+          kind: input.failure instanceof CheckError ? ('check' as const) : ('malformed' as const),
           message: message(input.failure),
         };
 

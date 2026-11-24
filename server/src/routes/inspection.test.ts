@@ -124,7 +124,7 @@ describe('inspection on verify responses (development)', () => {
     for (const id of ['A1', 'A2', 'A3', 'L1', 'L2', 'L3', 'L4', 'A4']) {
       expect(resultOf(inspection, id)).toBe('not_run');
     }
-    expect(inspection?.failure?.check).toBe('C3');
+    expect(inspection?.failure).toMatchObject({ check: 'C3', kind: 'check' });
   });
 
   it('unknown credential fails L1 without a stored credential', async () => {
@@ -133,6 +133,31 @@ describe('inspection on verify responses (development)', () => {
     const { inspection } = ApiError.parse(await res.json());
     expect(resultOf(inspection, 'L1')).toBe('fail');
     expect(inspection?.storedCredential).toBeUndefined();
+  });
+});
+
+describe('inspection of a malformed response', () => {
+  it('reaches the error body when the attestation object cannot be decoded after C4', async () => {
+    const browser = new Browser(dev.baseUrl);
+    const options = RegisterOptionsResponse.parse(
+      await (
+        await browser.request('POST', '/api/register/options', { displayName: 'test-user-1' })
+      ).json(),
+    );
+    const credential = new SoftAuthenticator().createCredential({
+      challenge: options.challenge,
+      origin: TEST_CONFIG.rpOrigin,
+      rpId: options.rp.id,
+    });
+    // Not CBOR: decoding fails lazily, inside the first check that reads authData.
+    credential.response.attestationObject = 'AAAA';
+    const res = await browser.request('POST', '/api/register/verify', credential);
+    expect(res.status).toBe(400);
+    const body = ApiError.parse(await res.json());
+    expect(body.error).toBe('malformed_response');
+    expect(body.inspection?.authenticatorData).toHaveProperty('error');
+    expect(resultOf(body.inspection, 'C4')).toBe('pass');
+    expect(body.inspection?.failure).toMatchObject({ check: 'A1', kind: 'malformed' });
   });
 });
 
@@ -200,22 +225,26 @@ describe('inspectCeremony', () => {
     });
     expect(inspection.authenticatorData).toEqual({ error: 'attestationObject is not CBOR' });
     expect(inspection.clientData.json).toBe(clientDataJson);
-    expect(inspection.failure).toEqual({ check: 'A1', message: 'attestationObject is not CBOR' });
+    expect(inspection.failure).toEqual({
+      check: 'A1',
+      kind: 'malformed',
+      message: 'attestationObject is not CBOR',
+    });
     expect(resultOf(inspection, 'A2')).toBe('not_run');
   });
 
   it('names the check of a failure thrown after every check passed (A4 on save)', () => {
     const failure = new CheckError('A4', 'signCount was updated by a concurrent login');
     const inspection = inspectCeremony({
-      ceremony: 'register',
+      ceremony: 'login',
       ctx: fakeContext(() => {
         throw new ParseError('unused');
       }),
-      checks: REGISTRATION_CHECKS,
-      results: new Map(REGISTRATION_CHECKS.map((c) => [c.id, 'pass'] as const)),
+      checks: AUTHENTICATION_CHECKS,
+      results: new Map(AUTHENTICATION_CHECKS.map((c) => [c.id, 'pass'] as const)),
       config: TEST_CONFIG,
       failure,
     });
-    expect(inspection.failure).toEqual({ check: 'A4', message: failure.message });
+    expect(inspection.failure).toEqual({ check: 'A4', kind: 'check', message: failure.message });
   });
 });

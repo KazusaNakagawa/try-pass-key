@@ -28,7 +28,11 @@ function el(tag: string, text: string, className?: string): HTMLElement {
 
 function heading(i: CeremonyInspection): HTMLElement {
   const name = i.ceremony === 'register' ? '登録' : 'ログイン';
-  const outcome = i.failure ? `拒否: ${i.failure.check ?? '形式エラー'}` : '受理';
+  const f = i.failure;
+  let outcome = '受理';
+  if (f?.kind === 'check') outcome = `拒否: ${f.check ?? '?'}`;
+  // A decode error surfaces inside the first check that reads the data; it is not that check's verdict.
+  else if (f) outcome = f.check ? `拒否: 形式エラー（${f.check} の実行中）` : '拒否: 形式エラー';
   return el('p', `${name}（${outcome}）`, 'inspector-heading');
 }
 
