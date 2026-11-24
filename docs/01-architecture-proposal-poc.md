@@ -345,6 +345,19 @@ export function runChecks(ctx: CeremonyContext, checks: readonly Check[]) { /* �
 | L3 | 保存した公開鍵で `authenticatorData ‖ SHA-256(clientDataJSON)` の署名を検証 | 署名偽造の拒否。認証の本体 |
 | L4 | BE が登録時に保存した値と同じで、BS=1 なら BE=1（WebAuthn L3 §7.2） | 登録した認証器とは別のものからの応答を受理し、BE/BS の記録が矛盾する（端末固定の鍵が同期型を名乗る、など） |
 
+### 6.5 `@simplewebauthn/server` との比較（M5、D35）
+
+`server/test/differential.test.ts` で、正常系と 6.1〜6.4 の各項目の攻撃シナリオ（`attacks.test.ts`・`login-attacks.test.ts` と同じ改ざん）の応答を、自前パイプラインと `@simplewebauthn/server` 14.1.0 の両方に通して判定を比べた。ライブラリには、応答が答えている options の challenge（このサーバーのように challenge を値で引くアプリが渡すもの）、`RP_ORIGIN`、`RP_ID`、`requireUserVerification: true`、要求したアルゴリズム、ログインでは credential ID で引いた保存済みの鍵を渡す。ライブラリが拒否するケースでは、エラーメッセージが狙った項目のものであることも確かめている。
+
+| 結果 | 項目 | 説明 |
+|---|---|---|
+| 一致 | 正常系（登録・ログイン）、C1、C3（origin）、A1、A2、A3、A4、R1、R3、L3 | 両方が受理、または両方が拒否する |
+| アプリの責務 | C2（期限切れ）、C4（使い捨て）、C5（ブラウザとの結び付け）、R2（登録済みの ID）、L2（持ち主の一致）、L4（BE の変化） | ライブラリは渡された challenge や鍵と比べるだけで受理する（L4 は BE/BS を返すだけで、保存値とは比べない）。その値を正しく用意し、比べるのはアプリの仕事で、自前パイプラインでは検証項目として実装している。C2・C4・C5 の受理は、アプリが期限・使用済み・ブラウザを自分で確かめなかった場合にライブラリだけで起きること。セッションに challenge を1つ持ち、使ったら消すアプリなら、ライブラリには別の値（またはなし）が渡り、そこで拒否される |
+| ライブラリが見ない | C3（`crossOrigin: true`）、R4（ID の長さ）、R5（弱い RSA 鍵） | 応答だけで判定できるが、ライブラリは受理する。登録では `crossOrigin` を読まず、ログインでは `topOrigin` があるときだけ見る |
+| 比較対象外 | L1（未登録の鍵） | 保存済みの鍵が見つからないので、アプリはライブラリを呼ぶ前に拒否する |
+
+食い違いは、どれも自前パイプラインの方が多く拒否する向きで、自前の方が受理しライブラリが拒否するケースはなかった。
+
 ## 7. API 仕様
 
 全API は JSON。認証済み API はセッションCookie（`HttpOnly; SameSite=Lax; Path=/`、HTTPS時は `Secure`）を要求する。状態変更系は `Origin` ヘッダーを検証して CSRF を防ぐ。
