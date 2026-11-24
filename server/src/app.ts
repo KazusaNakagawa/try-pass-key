@@ -9,6 +9,7 @@ import { loginRoutes } from './routes/login.js';
 import { registerRoutes } from './routes/register.js';
 import { sessionRoutes } from './routes/session.js';
 import { stepupRoutes } from './routes/stepup.js';
+import { credentialRoutes } from './routes/credentials.js';
 import { transferRoutes } from './routes/transfer.js';
 
 export interface AppDeps {
@@ -36,6 +37,7 @@ export function createApp(deps: AppDeps) {
   app.use(sessionRoutes(routeDeps));
   app.use(stepupRoutes(routeDeps));
   app.use(transferRoutes(routeDeps));
+  app.use(credentialRoutes(routeDeps));
 
   app.use(errorHandler);
   return app;

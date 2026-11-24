@@ -54,7 +54,14 @@ export default defineConfig(
       // expectRejectedBy (server/test/expect-check.ts) and expectStepUpRequired assert too.
       'vitest/expect-expect': [
         'error',
-        { assertFunctionNames: ['expect', 'expectRejectedBy', 'expectStepUpRequired'] },
+        {
+          assertFunctionNames: [
+            'expect',
+            'expectRejectedBy',
+            'expectStepUpRequired',
+            'expectError',
+          ],
+        },
       ],
       'sonarjs/assertions-in-tests': 'off',
     },

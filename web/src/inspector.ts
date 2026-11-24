@@ -36,7 +36,12 @@ function el(tag: string, text: string, className?: string): HTMLElement {
   return node;
 }
 
-const CEREMONY_NAMES = { register: '登録', login: 'ログイン', stepup: 'ステップアップ' } as const;
+const CEREMONY_NAMES = {
+  register: '登録',
+  login: 'ログイン',
+  stepup: 'ステップアップ',
+  add_credential: 'パスキー追加',
+} as const;
 
 function heading(i: CeremonyInspection): HTMLElement {
   const name = CEREMONY_NAMES[i.ceremony];

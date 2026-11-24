@@ -11,7 +11,7 @@ import {
 } from './checks/types.js';
 
 export interface InspectInput {
-  ceremony: 'register' | 'login' | 'stepup';
+  ceremony: 'register' | 'login' | 'stepup' | 'add_credential';
   ctx: RegistrationContext | AuthenticationContext | StepupContext;
   /** The pipeline that ran, in order. */
   checks: readonly Pick<Check<never>, 'id'>[];
@@ -92,10 +92,9 @@ function readAuthenticatorData(input: InspectInput): CeremonyInspection['authent
   const { ctx } = input;
   const authData = tryRead(() => ctx.authData);
   if ('error' in authData) return { error: authData.error };
-  const attested =
-    input.ceremony === 'register'
-      ? tryRead(() => (ctx as RegistrationContext).attestedCredentialData)
-      : undefined;
+  const attested = isCreation(input.ceremony)
+    ? tryRead(() => (ctx as RegistrationContext).attestedCredentialData)
+    : undefined;
   return {
     rpIdHash: authData.value.rpIdHash.toString('hex'),
     flags: { ...authData.value.flags },
@@ -111,9 +110,14 @@ function readAuthenticatorData(input: InspectInput): CeremonyInspection['authent
 
 /** Login and step-up, only once L3 verified the signature, so naming a credential ID reveals nothing. */
 function readStoredCredential(input: InspectInput): CeremonyInspection['storedCredential'] {
-  if (input.ceremony === 'register' || input.results.get('L3') !== 'pass') return undefined;
+  if (isCreation(input.ceremony) || input.results.get('L3') !== 'pass') return undefined;
   const stored = tryRead(() => (input.ctx as AuthenticationContext).credential);
   if (!('value' in stored) || !stored.value) return undefined;
   const { signCount, backupEligible, backupState } = stored.value;
   return { signCount, backupEligible, backupState };
+}
+
+/** A new account or an added passkey: both carry attested credential data. */
+function isCreation(ceremony: InspectInput['ceremony']): boolean {
+  return ceremony === 'register' || ceremony === 'add_credential';
 }

@@ -19,12 +19,14 @@ import type {
 type Ceremony =
   | { ceremony: 'register'; ctx: RegistrationContext }
   | { ceremony: 'login'; ctx: AuthenticationContext }
-  | { ceremony: 'stepup'; ctx: StepupContext };
+  | { ceremony: 'stepup'; ctx: StepupContext }
+  | { ceremony: 'add_credential'; ctx: RegistrationContext };
 
 const CHECKS = {
   register: REGISTRATION_CHECKS,
   login: AUTHENTICATION_CHECKS,
   stepup: STEPUP_CHECKS,
+  add_credential: REGISTRATION_CHECKS,
 } as const;
 
 /**
@@ -52,8 +54,9 @@ export function runInspected<T>(
       ...(failure === undefined ? {} : { failure }),
     } satisfies InspectInput);
   try {
-    if (input.ceremony === 'register') runChecks(input.ctx, CHECKS.register, record);
-    else if (input.ceremony === 'login') runChecks(input.ctx, CHECKS.login, record);
+    if (input.ceremony === 'register' || input.ceremony === 'add_credential') {
+      runChecks(input.ctx, CHECKS[input.ceremony], record);
+    } else if (input.ceremony === 'login') runChecks(input.ctx, CHECKS.login, record);
     else runChecks(input.ctx, CHECKS.stepup, record);
     const saved = input.save();
     return { saved, inspection: input.config.inspection ? inspect() : undefined };

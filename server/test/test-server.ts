@@ -29,7 +29,11 @@ export class Browser {
 
   constructor(private readonly baseUrl: string) {}
 
-  async request(method: 'GET' | 'POST', path: string, body?: unknown): Promise<Response> {
+  async request(
+    method: 'GET' | 'POST' | 'DELETE',
+    path: string,
+    body?: unknown,
+  ): Promise<Response> {
     const headers: Record<string, string> = { origin: TEST_CONFIG.rpOrigin };
     if (body !== undefined) headers['content-type'] = 'application/json';
     if (this.cookies.size > 0) {

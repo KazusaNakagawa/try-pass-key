@@ -10,6 +10,7 @@ import {
   type SessionDeps,
 } from '../session/http.js';
 import { getBalance } from '../users.js';
+import { assertDeletable } from './credentials.js';
 import { operationHash } from '../operations/operation-hash.js';
 import { approveStepup, buildStepupContext, createStepupOptions } from '../webauthn/stepup.js';
 import { runInspected } from './inspected.js';
@@ -24,6 +25,9 @@ export function stepupRoutes(deps: SessionDeps): Router {
     // Refuse now rather than after the user has approved an operation that cannot happen.
     if (op.kind === 'transfer' && getBalance(deps.db, session.userId) < op.amount) {
       throw new HttpError(400, 'insufficient_funds', 'the balance is not enough for this transfer');
+    }
+    if (op.kind === 'delete_credential') {
+      assertDeletable(deps.db, session.userId, Buffer.from(op.credentialId, 'base64url'));
     }
     res.json(
       createStepupOptions(deps, {
