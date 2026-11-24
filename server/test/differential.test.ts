@@ -10,14 +10,17 @@
  *   - not_compared:   a normal app would not call the library at all.
  * The library is used only here (server/src/webauthn/CLAUDE.md, D11).
  */
-import { verifyRegistrationResponse } from '@simplewebauthn/server';
+import { generateKeyPairSync, randomBytes } from 'node:crypto';
+import { verifyAuthenticationResponse, verifyRegistrationResponse } from '@simplewebauthn/server';
 import { describe, expect, it } from 'vitest';
-import type { RegistrationResponseJSON } from '@app/shared';
+import type { AuthenticationResponse, RegistrationResponseJSON } from '@app/shared';
+import { saveAuthentication } from '../src/webauthn/authentication.js';
 import { saveRegistration } from '../src/webauthn/registration.js';
 import { CheckError, type CheckId } from '../src/webauthn/checks/types.js';
-import { REGISTRATION_CHECKS, runChecks } from '../src/webauthn/pipeline.js';
+import { AUTHENTICATION_CHECKS, REGISTRATION_CHECKS, runChecks } from '../src/webauthn/pipeline.js';
+import { LoginHarness, type RegisteredUser } from './login-harness.js';
 import { RegistrationHarness } from './registration-harness.js';
-import { SoftAuthenticator } from './soft-authenticator.js';
+import { SoftAuthenticator, type AssertionOverrides } from './soft-authenticator.js';
 
 type Verdict = 'accept' | CheckId;
 type LibraryVerdict = 'accept' | 'reject' | 'not_called';
@@ -276,16 +279,246 @@ const registrationCases: Omit<Case, 'ceremony'>[] = [
 
 // ----------------------------------------------------------------------- login
 
-const cases: Case[] = [...registrationCases.map((c) => ({ ...c, ceremony: 'register' as const }))];
+/**
+ * One login attempt: our pipeline on the response, then the library on the same
+ * JSON with what a normal app passes: the challenge it issued to this browser,
+ * and the stored credential the response's credential ID finds. When no
+ * credential is found, a normal app stops there and never calls the library.
+ */
+async function compareLogin(
+  h: LoginHarness,
+  begun: ReturnType<LoginHarness['beginLogin']>,
+  response: AuthenticationResponse,
+  ceremonyId: string | undefined = begun.ceremonyId,
+): Promise<Outcome> {
+  const ctx = h.loginContext(response, ceremonyId);
+  const ours = ourVerdict(() => {
+    runChecks(ctx, AUTHENTICATION_CHECKS);
+  });
+  const stored = ctx.credential;
+  if (!stored) return { ours, library: 'not_called' };
+  const library = await libraryVerdict(() =>
+    verifyAuthenticationResponse({
+      response,
+      expectedChallenge: begun.options.challenge,
+      expectedOrigin: h.deps.config.rpOrigin,
+      expectedRPID: h.deps.config.rpId,
+      requireUserVerification: true,
+      credential: {
+        id: stored.id.toString('base64url'),
+        publicKey: new Uint8Array(stored.publicKey),
+        counter: stored.signCount,
+      },
+    }),
+  );
+  return { ours, ...library };
+}
+
+/** A registered user logs in with a response tampered as the attack scenario does. */
+function loginAttack(overrides: AssertionOverrides): () => Promise<Outcome> {
+  return () => {
+    const h = new LoginHarness();
+    const user = h.register();
+    const begun = h.beginLogin();
+    return compareLogin(h, begun, h.assert(begun, user, overrides));
+  };
+}
+
+const loginCases: Omit<Case, 'ceremony'>[] = [
+  {
+    check: null,
+    name: 'valid response',
+    ours: 'accept',
+    library: 'accept',
+    category: 'match',
+    run: loginAttack({}),
+  },
+  {
+    check: 'C1',
+    name: 'a registration (webauthn.create) response is used to log in',
+    ours: 'C1',
+    library: 'reject',
+    libraryError: 'Unexpected authentication response type',
+    category: 'match',
+    run: loginAttack({ type: 'webauthn.create' }),
+  },
+  {
+    check: 'C2',
+    name: 'a response to an expired challenge is submitted',
+    ours: 'C2',
+    library: 'accept',
+    category: 'app',
+    reason: 'the library compares the challenge it is given; expiry is the store of the app',
+    run: () => {
+      const h = new LoginHarness();
+      const user = h.register();
+      const begun = h.beginLogin();
+      h.clock = new Date(h.clock.getTime() + 10 * 60 * 1000);
+      return compareLogin(h, begun, h.assert(begun, user));
+    },
+  },
+  {
+    check: 'C3',
+    name: 'a response created on a phishing origin is relayed',
+    ours: 'C3',
+    library: 'reject',
+    libraryError: 'Unexpected response origin',
+    category: 'match',
+    run: loginAttack({ origin: 'https://evil.example' }),
+  },
+  {
+    check: 'C3',
+    name: 'a response created in a cross-origin iframe (crossOrigin: true, no topOrigin)',
+    ours: 'C3',
+    library: 'accept',
+    category: 'library_skips',
+    reason: 'verifyAuthenticationResponse checks crossOrigin only when topOrigin is present',
+    run: loginAttack({ crossOrigin: true }),
+  },
+  {
+    check: 'C4',
+    name: 'a captured login response is replayed',
+    ours: 'C2',
+    library: 'accept',
+    category: 'app',
+    reason: 'the library cannot know the challenge was used; consuming it is the app job',
+    run: () => {
+      const h = new LoginHarness();
+      const user = h.register();
+      const begun = h.beginLogin();
+      const response = h.assert(begun, user);
+      const first = h.loginContext(response, begun.ceremonyId);
+      runChecks(first, AUTHENTICATION_CHECKS);
+      saveAuthentication(h.deps, first);
+      return compareLogin(h, begun, response);
+    },
+  },
+  {
+    check: 'C5',
+    name: "a leaked login response is submitted from the attacker's browser",
+    ours: 'C5',
+    library: 'accept',
+    category: 'app',
+    reason: 'the app hands the library the challenge, so binding it to a browser is the app job',
+    run: () => {
+      const h = new LoginHarness();
+      const user = h.register();
+      const victim = h.beginLogin();
+      const attacker = h.beginLogin();
+      return compareLogin(h, victim, h.assert(victim, user), attacker.ceremonyId);
+    },
+  },
+  {
+    check: 'A1',
+    name: 'a signature from a credential scoped to another RP ID',
+    ours: 'A1',
+    library: 'reject',
+    libraryError: 'Unexpected RP ID hash',
+    category: 'match',
+    run: loginAttack({ rpId: 'evil.example' }),
+  },
+  {
+    check: 'A2',
+    name: 'the authenticator signs with nobody present (UP=0)',
+    ours: 'A2',
+    library: 'reject',
+    libraryError: 'User not present',
+    category: 'match',
+    run: loginAttack({ flags: { up: false } }),
+  },
+  {
+    check: 'A3',
+    name: 'login without biometrics or PIN (UV=0)',
+    ours: 'A3',
+    library: 'reject',
+    libraryError: 'User verification required',
+    category: 'match',
+    run: loginAttack({ flags: { uv: false } }),
+  },
+  {
+    check: 'L1',
+    name: 'a key that was never registered is used',
+    ours: 'L1',
+    library: 'not_called',
+    category: 'not_compared',
+    reason: 'no stored credential to hand the library; the app rejects before calling it',
+    run: loginAttack({ credentialId: randomBytes(16) }),
+  },
+  {
+    check: 'L2',
+    name: "the attacker signs with their own key and sends the victim's userHandle",
+    ours: 'L2',
+    library: 'accept',
+    category: 'app',
+    reason:
+      'the library verifies the signature of the credential it is given; the app picks the user',
+    run: () => {
+      const h = new LoginHarness();
+      const victim: RegisteredUser = h.register('test-user-1');
+      const attacker = h.register('test-user-2');
+      const begun = h.beginLogin();
+      return compareLogin(h, begun, h.assert(begun, attacker, { userHandle: victim.userHandle }));
+    },
+  },
+  {
+    check: 'L3',
+    name: 'the signature is forged with a key the attacker controls',
+    ours: 'L3',
+    library: 'reject',
+    libraryError: 'verified: false',
+    category: 'match',
+    run: loginAttack({ signWith: generateKeyPairSync('ec', { namedCurve: 'P-256' }).privateKey }),
+  },
+  {
+    check: 'L4',
+    name: 'a device-bound credential (BE=0) reports itself as synced (BE=1, BS=1)',
+    ours: 'L4',
+    library: 'accept',
+    category: 'library_skips',
+    reason: 'the library is not given the stored BE, so it cannot see it change',
+    run: () => {
+      const h = new LoginHarness();
+      const deviceBound = new SoftAuthenticator({ flags: { be: false, bs: false } });
+      const user = h.register('test-user-1', deviceBound);
+      const begun = h.beginLogin();
+      return compareLogin(h, begun, h.assert(begun, user, { flags: { be: true, bs: true } }));
+    },
+  },
+  {
+    check: 'A4',
+    name: 'a cloned authenticator reuses a signCount that was already seen',
+    ours: 'A4',
+    library: 'reject',
+    libraryError: 'Response counter value 5 was lower than expected 5',
+    category: 'match',
+    run: () => {
+      const h = new LoginHarness();
+      const user = h.register();
+      h.setStoredSignCount(user, 5);
+      const begun = h.beginLogin();
+      return compareLogin(h, begun, h.assert(begun, user, { signCount: 5 }));
+    },
+  },
+];
+
+const cases: Case[] = [
+  ...registrationCases.map((c) => ({ ...c, ceremony: 'register' as const })),
+  ...loginCases.map((c) => ({ ...c, ceremony: 'login' as const })),
+];
+
+/** 'match' when both agree; the kind of disagreement is the row's own claim. */
+function categoryOf(c: Case): Category {
+  if (c.library === 'not_called') return 'not_compared';
+  if ((c.ours === 'accept') === (c.library === 'accept')) return 'match';
+  return c.category === 'app' || c.category === 'library_skips' ? c.category : 'app';
+}
 
 describe('differential test against @simplewebauthn/server', () => {
   it('every row that differs explains why, and every library rejection names its concern', () => {
     const problems = cases.flatMap((c) => [
       ...(c.category !== 'match' && !c.reason ? [`${c.name}: no reason`] : []),
       ...(c.library === 'reject' && !c.libraryError ? [`${c.name}: no libraryError`] : []),
-      ...((c.category === 'match') !== ((c.ours === 'accept') === (c.library === 'accept'))
-        ? [`${c.name}: category does not fit the verdicts`]
-        : []),
+      ...(c.category !== categoryOf(c) ? [`${c.name}: category does not fit the verdicts`] : []),
     ]);
     expect(problems).toEqual([]);
   });
@@ -293,6 +526,11 @@ describe('differential test against @simplewebauthn/server', () => {
   it('has a row for every registration check', () => {
     const ids = new Set(cases.filter((c) => c.ceremony === 'register').map((c) => c.check));
     expect(REGISTRATION_CHECKS.map((c) => c.id).filter((id) => !ids.has(id))).toEqual([]);
+  });
+
+  it('has a row for every login check', () => {
+    const ids = new Set(cases.filter((c) => c.ceremony === 'login').map((c) => c.check));
+    expect(AUTHENTICATION_CHECKS.map((c) => c.id).filter((id) => !ids.has(id))).toEqual([]);
   });
 
   describe.each(cases)('$ceremony: $name', (c) => {
