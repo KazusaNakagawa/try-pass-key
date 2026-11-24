@@ -305,7 +305,7 @@ export function runChecks(ctx: CeremonyContext, checks: readonly Check[]) { /* �
 - **処理の分担**: CBOR のデコードだけ `cbor-x` に任せる。authenticatorData のバイト列の分解（rpIdHash 32byte、flags 1byte、signCount 4byte、attestedCredentialData）、COSE 鍵から `node:crypto` の公開鍵への変換、署名検証は自前で書く。
 - **外す方法**: テストでは `AUTHENTICATION_CHECKS` から1項目を除いたリストを `runChecks` に渡し、改ざんした応答が通ることを示す。本番のルートが受け取るのは定数のリストだけで、検証を無効にするフラグや環境変数は作らない（無効化の経路を本番コードに残さない）。
 - **自前実装の誤りへの備え**: 同じ入力（正常系と攻撃パターン）を `@simplewebauthn/server` にも通し、受理するか拒否するかの判定が一致することを差分テストで確認する。食い違った場合は、どちらが仕様（W3C WebAuthn Level 3 の 7章）に沿っているかを調べ、結果を `02-knowledge-passkey.md` に記録する。
-- **エラーの返し方**: `CheckError` は失敗した項目の ID を持ち、7章のエラーコードへ変換する。どの検証で落ちたかをログと `/api/debug/last-ceremony` で確認できるようにする。
+- **エラーの返し方**: `CheckError` は失敗した項目の ID を持ち、7章のエラーコードへ変換する。どの検証で落ちたかをログと verify 応答の `inspection`（`INSPECTION=on` のときのみ）で確認できるようにする。
 
 ### 6.1 共通（clientDataJSON）
 
@@ -364,11 +364,12 @@ export function runChecks(ctx: CeremonyContext, checks: readonly Check[]) { /* �
 | POST | `/api/stepup/options` | 要 | 取引内容に紐づく再認証オプション |
 | POST | `/api/stepup/verify` | 要 | 再認証を検証しセッションに承認を記録 |
 | POST | `/api/transfer` | 要 + ステップアップ | 模擬送金。残高を減らし履歴を記録する |
-| GET | `/api/debug/last-ceremony` | 開発時のみ | 直近の登録・認証のデコード結果を返す（学習用の可視化） |
 
 エラー応答は `{ "error": "<code>", "detail": "<人間向け説明>" }` に統一する。主なコードは `invalid_challenge`、`invalid_origin`、`user_verification_required`、`unknown_credential`、`signature_invalid`、`step_up_required`。
 
 6章の検証で拒否した場合は、どの項目で落ちたかを `check`（`C3` など）で返す（学習用の可視化）。検証項目とコードの対応は `server/src/http/errors.ts` の `CHECK_ERROR_CODES` にある。デコードできない応答は `malformed_response`、リクエスト本文の形式違反は `invalid_request`、`Origin` ヘッダーの不一致は `invalid_request_origin`（403）。
+
+環境変数 `INSPECTION=on` のとき（compose の開発スタックは既定で on、それ以外の既定は off、`NODE_ENV=production` との組み合わせは起動時に拒否）、`/api/register/verify`・`/api/login/verify` の応答に `inspection` を付ける（学習用の可視化、M4、D33、D34）。成功時も、6章の検証やデコードで拒否した 400 応答も同じ形で、期待値、デコードした clientDataJSON と authenticatorData（フラグ、rpIdHash、signCount）、ログイン時は署名の検証（L3）を通ったときだけ保存済みの signCount と BE/BS、各検証項目の結果（`pass` / `fail` / `not_run`）、失敗理由を持つ。型は `shared/src/inspection.ts` の `CeremonyInspection`。authenticatorData は challenge の照合（C2）を通ったときだけデコードして載せる。リクエスト本文の形式違反など検証の前に落ちた応答や、DB エラーなど 6章の検証でもデコードでもない失敗（500）には付かない。
 
 ## 8. データモデル
 
@@ -617,7 +618,7 @@ try-pass-key/
 | K2 | `docker compose down -v` でDBを消しても、認証器側にはパスキーが残る | 使えないパスキーが一覧に出続け、選ぶと `unknown_credential` になる | 学習項目として扱う。Signal API（`PublicKeyCredential.signalUnknownCredential` など）で認証器に削除を伝える実装を M7 の任意課題にする |
 | K3 | RP ID を変えると既存のパスキーがすべて使えなくなる | トンネル利用時に毎回作り直しになる | `.env` で切り替え、切り替え時はDBも初期化する手順を `CLAUDE.md` に書く |
 | K4 | AI がテストを通すために検証を緩める | 6章の検証が抜けたまま「動く」状態になる。学習目的が崩れる | 6章の各項目に対応する攻撃再現テストを先に書き（TDD）、`CLAUDE.md` に「攻撃再現テストを消す・skip する変更は禁止」と明記する |
-| K5 | `/api/debug/last-ceremony` が他のコードに混ざって残る | 本番に持ち込むと情報漏洩になる | `NODE_ENV=development` のときだけルートを登録する。PoCを本番に流用しない前提も `CLAUDE.md` に書く |
+| K5 | 可視化用の `inspection` が本番の応答に残る | 本番に持ち込むと情報漏洩になる | `INSPECTION=on` のときだけ組み立て、既定は off、`NODE_ENV=production` との組み合わせは起動時に拒否する。付かないことをテスト（`server/src/routes/inspection.test.ts`）で確かめる。PoCを本番に流用しない前提も `CLAUDE.md` に書く |
 | K6 | macOS の Docker でバインドマウントのファイル監視が遅い・効かない | ホットリロードが不安定になる。M1 で実際に発生した（Rancher Desktop。変更イベントが届かず、ファイルの追加・削除がコンテナから見えるまで約10〜12秒遅れる） | ポーリングを既定にした（`WATCH_POLLING=true`。tsx は `CHOKIDAR_USEPOLLING`、Vite は `server.watch.usePolling`）。遅延はホストのファイル共有方式が原因なので、気になる場合は Docker 実行環境の共有方式（virtiofs 等）を見直す |
 | K7 | Safari と Chrome で挙動が違う（Conditional UI、エラーの出方） | Chrome だけで作ると Safari で動かない | 12章の受け入れ基準どおり両方で確認する。差分は M8 の振り返りに記録する |
 | K8 | 一時 Cookie `ceremony` は1つしか持てない | 複数タブで同時に ceremony を始めると、後のタブが前のタブの challenge を上書きし、前のタブは `invalid_challenge` になる。Conditional UI はページ表示時に options を取るので起きやすい | PoC では失敗させ、options を取り直す（Conditional UI は再起動）。本番で問題になる場合は Cookie に複数の行IDを持たせる |

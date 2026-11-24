@@ -1,6 +1,6 @@
 import type { ErrorRequestHandler } from 'express';
 import { ZodError } from 'zod';
-import type { ApiError } from '@app/shared';
+import type { ApiError, CeremonyInspection } from '@app/shared';
 import { CheckError, type CheckId } from '../webauthn/checks/types.js';
 import { ParseError } from '../webauthn/errors.js';
 
@@ -45,12 +45,20 @@ function isClientError(err: unknown): err is { status: number; message: string }
 
 export const errorHandler: ErrorRequestHandler = (err: unknown, _req, res, _next) => {
   const send = (status: number, body: ApiError) => res.status(status).json(body);
+  // Set by runInspected in development only (M4).
+  const inspection = res.locals.inspection as CeremonyInspection | undefined;
+  const withInspection = inspection ? { inspection } : {};
 
   if (err instanceof CheckError) {
     console.warn(`[verify] rejected by ${err.message}`);
-    send(400, { error: CHECK_ERROR_CODES[err.check], detail: err.message, check: err.check });
+    send(400, {
+      error: CHECK_ERROR_CODES[err.check],
+      detail: err.message,
+      check: err.check,
+      ...withInspection,
+    });
   } else if (err instanceof ParseError) {
-    send(400, { error: 'malformed_response', detail: err.message });
+    send(400, { error: 'malformed_response', detail: err.message, ...withInspection });
   } else if (err instanceof ZodError) {
     send(400, { error: 'invalid_request', detail: err.issues.map((i) => i.message).join('; ') });
   } else if (err instanceof HttpError) {

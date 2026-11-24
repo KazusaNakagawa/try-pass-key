@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { OptionalInspection } from './inspection.js';
 import { Base64Url } from './registration.js';
 
 /** POST /api/login/options response (PublicKeyCredentialRequestOptionsJSON). */
@@ -48,5 +49,7 @@ export const LoginVerifyResponse = z.object({
     signCount: z.number(),
     backupState: z.boolean(),
   }),
+  /** Development only (M4). */
+  inspection: OptionalInspection,
 });
 export type LoginVerifyResponse = z.infer<typeof LoginVerifyResponse>;

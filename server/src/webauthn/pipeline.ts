@@ -16,7 +16,7 @@ import { R2 } from './checks/R2.js';
 import { R3 } from './checks/R3.js';
 import { R4 } from './checks/R4.js';
 import { R5 } from './checks/R5.js';
-import type { AuthenticationContext, Check, RegistrationContext } from './checks/types.js';
+import type { AuthenticationContext, Check, CheckId, RegistrationContext } from './checks/types.js';
 
 /**
  * Every check a registration must pass, in order. Routes use this constant and
@@ -65,8 +65,23 @@ export const AUTHENTICATION_CHECKS: readonly Check<AuthenticationContext>[] = Ob
   A4,
 ]);
 
-export function runChecks<Ctx>(ctx: Ctx, checks: readonly Check<Ctx>[]): void {
+/**
+ * Runs every check in order and stops at the first that throws.
+ * `onResult` only observes (for the inspection, M4): it is told 'pass' after a
+ * check returns and 'fail' before the error is rethrown unchanged.
+ */
+export function runChecks<Ctx>(
+  ctx: Ctx,
+  checks: readonly Check<Ctx>[],
+  onResult?: (id: CheckId, result: 'pass' | 'fail') => void,
+): void {
   for (const check of checks) {
-    check.run(ctx);
+    try {
+      check.run(ctx);
+    } catch (err) {
+      onResult?.(check.id, 'fail');
+      throw err;
+    }
+    onResult?.(check.id, 'pass');
   }
 }

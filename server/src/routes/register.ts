@@ -6,7 +6,7 @@ import {
 } from '@app/shared';
 import { CEREMONY_COOKIE, ceremonyCookieOptions, readCookie } from '../http/cookies.js';
 import { startSession } from '../session/http.js';
-import { REGISTRATION_CHECKS, runChecks } from '../webauthn/pipeline.js';
+import { runInspected } from './inspected.js';
 import {
   buildRegistrationContext,
   createRegistrationOptions,
@@ -31,14 +31,23 @@ export function registerRoutes(deps: RegistrationDeps): Router {
     res.clearCookie(CEREMONY_COOKIE, { ...ceremonyCookieOptions(deps.config), maxAge: undefined });
 
     const ctx = buildRegistrationContext(deps, { response, ceremonyId });
-    runChecks(ctx, REGISTRATION_CHECKS);
-    const saved = saveRegistration(deps, ctx, response.response.transports ?? []);
+    const { saved, inspection } = runInspected({
+      ceremony: 'register',
+      ctx,
+      config: deps.config,
+      res,
+      save: () => saveRegistration(deps, ctx, response.response.transports ?? []),
+    });
     // Registering also logs the user in, with a fresh session ID (D22).
     const session = startSession(deps, req, res, {
       id: saved.userId,
       displayName: saved.displayName,
     });
-    const body: RegisterVerifyResponse = { ...saved, authAt: session.authAt };
+    const body: RegisterVerifyResponse = {
+      ...saved,
+      authAt: session.authAt,
+      ...(inspection ? { inspection } : {}),
+    };
     res.json(body);
   });
 

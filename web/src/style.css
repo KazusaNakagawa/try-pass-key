@@ -39,3 +39,33 @@ section[hidden],
 button[hidden] {
   display: none;
 }
+
+/* M4 inspector */
+.inspector-heading {
+  font-weight: bold;
+}
+.inspector-checks span {
+  font-family: ui-monospace, monospace;
+}
+.check-fail,
+.mismatch,
+.inspector-failure {
+  color: #d33;
+  font-weight: bold;
+}
+.check-not_run {
+  opacity: 0.5;
+}
+#inspector table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+}
+#inspector th,
+#inspector td {
+  text-align: left;
+  padding: 0.2rem 0.4rem;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  word-break: break-all;
+}

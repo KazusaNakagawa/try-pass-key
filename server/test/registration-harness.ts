@@ -10,7 +10,7 @@ import {
 } from '../src/webauthn/registration.js';
 import { SoftAuthenticator, type AttestationOverrides } from './soft-authenticator.js';
 
-export const TEST_CONFIG: Config = loadConfig({ NODE_ENV: 'test' });
+export const TEST_CONFIG: Config = loadConfig({ NODE_ENV: 'test', INSPECTION: 'on' });
 
 /**
  * One registration ceremony against an in-memory database:

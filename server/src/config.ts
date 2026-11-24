@@ -21,6 +21,15 @@ const Env = z
       }, 'RP_ORIGIN must be an origin only (scheme://host[:port]), without a path, query or fragment')
       .transform((v) => new URL(v).origin),
     DB_PATH: z.string().min(1).default('/data/app.db'),
+    /**
+     * Adds the ceremony inspection (M4) to verify responses. Off unless asked:
+     * compose turns it on for the local stack, and production refuses it.
+     */
+    INSPECTION: z.enum(['on', 'off']).default('off'),
+  })
+  .refine((e) => !(e.NODE_ENV === 'production' && e.INSPECTION === 'on'), {
+    message: 'INSPECTION=on is not allowed when NODE_ENV=production',
+    path: ['INSPECTION'],
   })
   .refine(
     // The RP ID must equal the origin's host or be a registrable suffix of it.
@@ -38,6 +47,8 @@ export type Config = {
   rpId: string;
   rpOrigin: string;
   dbPath: string;
+  /** Verify responses carry the ceremony inspection (M4). Never true in production. */
+  inspection: boolean;
 };
 
 /** Parses environment variables. Throws with a readable message if any value is invalid. */
@@ -49,5 +60,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     rpId: parsed.RP_ID,
     rpOrigin: parsed.RP_ORIGIN,
     dbPath: parsed.DB_PATH,
+    inspection: parsed.INSPECTION === 'on',
   };
 }

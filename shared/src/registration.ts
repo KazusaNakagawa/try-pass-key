@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { OptionalInspection } from './inspection.js';
 
 /** base64url without padding, as used by WebAuthn JSON serialization. */
 export const Base64Url = z.string().regex(/^[A-Za-z0-9_-]*$/, 'must be base64url');
@@ -86,5 +87,7 @@ export const RegisterVerifyResponse = z.object({
     backupState: z.boolean(),
     transports: z.array(Transport),
   }),
+  /** Development only (M4). */
+  inspection: OptionalInspection,
 });
 export type RegisterVerifyResponse = z.infer<typeof RegisterVerifyResponse>;

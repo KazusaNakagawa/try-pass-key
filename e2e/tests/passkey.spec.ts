@@ -30,6 +30,12 @@ async function register(page: Page, displayName: string): Promise<void> {
   await expect(page.locator('#register-result')).toContainText('登録しました');
   // Registration also logs in.
   await expect(page.locator('#me')).toContainText(`ログイン中: ${displayName}`);
+  // M4: the decoded ceremony is shown, every §6 check passed.
+  const inspector = page.locator('#inspector');
+  await expect(inspector).toContainText('登録（受理）');
+  await expect(inspector).toContainText('C4 ✓');
+  await expect(inspector).toContainText('UV=1');
+  await expect(inspector).not.toContainText('✗');
 }
 
 test('Conditional UI: after logout, the passkey from autofill logs in again', async ({ page }) => {
@@ -70,4 +76,6 @@ test('login button: username-less login in a browser without Conditional UI', as
   await expect(page.locator('#login-result')).toBeVisible();
   await expect(page.locator('#login-result')).toContainText('ログインしました');
   await expect(page.locator('#me')).toContainText('ログイン中: test-user-e2e-2');
+  await expect(page.locator('#inspector')).toContainText('ログイン（受理）');
+  await expect(page.locator('#inspector')).toContainText('保存値');
 });
