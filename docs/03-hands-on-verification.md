@@ -121,7 +121,7 @@ await (await fetch('/api/credentials/<id>', { method: 'DELETE' })).json()
 
 #### 実機での結果（2026-11-24、Chrome + 1Password）
 
-- Apple Passwords（iCloud キーチェーン）での2本目の追加、2本の削除、最後の1本の削除ボタンが押せないことを確かめた
+- Apple Passwords（iCloud キーチェーン）での2本目の追加、2本の削除、最後の1本の削除ボタンが押せないことを確かめた。Apple Passwords の鍵は BE=1・BS=1、transports は `hybrid`・`internal`（一覧と `credentials` の値。1Password の鍵も BE=1・BS=1）
 - 1Password を選ぶと、`excludeCredentials` に当たっても拒否されず、「既存をアップデート」が出た。選んでも新しい鍵として追加された（docs/02 §1.2、K11）。重複した鍵は「削除」で消せる
 - 1Password の項目の「最終編集」時刻と、一覧の「作成」時刻を並べると、どの項目がどの鍵かを推測できる
 
@@ -133,7 +133,7 @@ await (await fetch('/api/credentials/<id>', { method: 'DELETE' })).json()
 
 docs/01 §12 の「Chrome と Safari の両方で、登録とユーザー名なしログインが成功する」のうち、Safari はまだ確かめていない（docs/04 §2）。Chrome との違いを K7 に記録する。
 
-準備: Safari の「設定 → 詳細 → Web デベロッパ用の機能を表示」をオンにすると、メニューに「開発」が出て Web インスペクタが使える。開発スタックは `WEB_PORT=5174 docker compose up -d --wait` で起動し、http://localhost:5174 を開く。
+準備: Safari の「設定 → 詳細 → Web デベロッパ用の機能を表示」をオンにすると、メニューに「開発」が出て Web インスペクタが使える。開発スタックは1章のとおり `docker compose up -d --wait` で起動し、http://localhost:5173 を開く（K9 で `.env` の `WEB_PORT` を変えている場合はそのポート）。
 
 1. **登録**: 表示名を `test-safari-1` にして「パスキーを作成」を押す。どの保存先が提案されたか（iCloud キーチェーンか 1Password か）と、Touch ID が出たかを控える。「直近の ceremony」が `登録（受理）` で ✗ がないことを確かめる
 2. **ログイン（ボタン）**: ログアウトし、「パスキーでログイン」で `test-safari-1` に入れることを確かめる
