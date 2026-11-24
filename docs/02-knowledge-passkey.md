@@ -19,6 +19,16 @@
 - **終わったら削除する**。macOS はシステム設定の「パスワード」、Chrome は `chrome://password-manager` から消せる。同期されていれば1か所で消すと全端末から消えるはずだが、確かめていない（推測）。
 - **表示名に個人情報を入れない**。登録時の表示名（`user.name` / `user.displayName`）は認証器に渡される。WebAuthn 仕様では、認証器が必ず保存するのは userHandle（`user.id`）だけで、表示名を保存するかは認証器の任意である（WebAuthn L3 §6.3.2。確認画面での表示も SHOULD）。1Password は保存しており、一覧に `test-user-1` が出た（[worklog 2026-11-23](./worklog/2026-11-23.md)）。同期型なら他の端末にも渡ると考えられる（推測）。`test-user-1` のような名前にする。
 
+### 1.1 消したパスキーを認証器に伝える（Signal API）
+
+サーバーで鍵を消しても（DB の作り直し、M7 の削除）、認証器にはパスキーが残る（docs/01 K2）。WebAuthn L3 の Signal API は、RP から認証器にそれを伝える仕組みである。
+
+- `PublicKeyCredential.signalUnknownCredential({ rpId, credentialId })`: その鍵はもう受け付けない
+- `PublicKeyCredential.signalAllAcceptedCredentials({ rpId, userId, allAcceptedCredentialIds })`: このユーザーで受け付ける鍵はこれだけ（それ以外は消してよい）
+- `PublicKeyCredential.signalCurrentUserDetails`: 表示名の変更を伝える（本PoCでは使わない）
+
+いずれもユーザーの操作なしで呼べ、結果は返らない（Promise は認証器が何をしたかを教えない）。消すか隠すかは認証器が決める。本PoCは M7 で、一覧の取得・削除の後に `signalAllAcceptedCredentials`、L1 で拒否されたログインの後に `signalUnknownCredential` を呼ぶ（`web/src/signal.ts`）。1Password や iCloud キーチェーンでの実際の効き方はまだ確かめていない（docs/03 の手順で確かめる）。
+
 ## 2. 1Password などに保存したパスキーは盗まれるか
 
 ### 結論
