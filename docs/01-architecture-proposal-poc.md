@@ -696,7 +696,8 @@ try-pass-key/
 | # | 懸念 | 影響 | 対策 |
 |---|---|---|---|
 | K1 | 実機で試すと、`localhost` 用のパスキーが iCloud キーチェーンや Google パスワードマネージャーに残る | 実害はない（`localhost` 以外では使われず、既存のパスキーにも触れない）。一覧が散らかる程度 | 普段の開発は仮想認証器（DevTools / E2E）で行い、実機確認後は不要なパスキーを削除する。表示名にはテスト用の名前を使う。詳細は [02-knowledge-passkey.md](./02-knowledge-passkey.md) の1章 |
-| K2 | `docker compose down -v` でDBを消しても、認証器側にはパスキーが残る | 使えないパスキーが一覧に出続け、選ぶと `unknown_credential` になる | 学習項目として扱う。M7 で Signal API を実装した: 一覧の取得と削除の後に `signalAllAcceptedCredentials`、L1 で拒否されたログインの後に `signalUnknownCredential`。認証器ごとの効き方は実機で確かめて docs/02 に書く |
+| K2 | `docker compose down -v` でDBを消しても、認証器側にはパスキーが残る | 使えないパスキーが一覧に出続け、選ぶと `unknown_credential` になる | 学習項目として扱う。M7 で Signal API を実装した: 一覧の取得と削除の後に `signalAllAcceptedCredentials`、L1 で拒否されたログインの後に `signalUnknownCredential`。実機では、Chrome は両方の関数を持つが、1Password の項目は削除後も消えなかった（docs/02 §1.1） |
+| K11 | `excludeCredentials` は認証器への依頼で、守るかは認証器次第（M7） | 1Password は同じユーザーへの2本目を拒否せず「既存をアップデート」を出し、同じ製品の鍵が重複した。既存の鍵が置き換わり、サーバーに署名できない鍵が残った可能性もある | サーバーでは強制しない（D49）。重複した鍵は一覧から削除できる。認証器ごとの挙動は docs/02 §1.2 |
 | K3 | RP ID を変えると既存のパスキーがすべて使えなくなる | トンネル利用時に毎回作り直しになる | `.env` で切り替え、切り替え時はDBも初期化する手順を `CLAUDE.md` に書く |
 | K4 | AI がテストを通すために検証を緩める | 6章の検証が抜けたまま「動く」状態になる。学習目的が崩れる | 6章の各項目に対応する攻撃再現テストを先に書き（TDD）、`CLAUDE.md` に「攻撃再現テストを消す・skip する変更は禁止」と明記する |
 | K5 | 可視化用の `inspection` が本番の応答に残る | 本番に持ち込むと情報漏洩になる | `INSPECTION=on` のときだけ組み立て、既定は off、`NODE_ENV=production` との組み合わせは起動時に拒否する。付かないことをテスト（`server/src/routes/inspection.test.ts`）で確かめる。PoCを本番に流用しない前提も `CLAUDE.md` に書く |

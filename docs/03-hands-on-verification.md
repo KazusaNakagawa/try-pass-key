@@ -119,6 +119,12 @@ await (await fetch('/api/credentials/<id>', { method: 'DELETE' })).json()
 
 `{ error: 'step_up_required', check: 'S3', ... }` が返る。
 
+#### 実機での結果（2026-11-24、Chrome + 1Password）
+
+- Apple Passwords（iCloud キーチェーン）での2本目の追加、2本の削除、最後の1本の削除ボタンが押せないことを確かめた
+- 1Password を選ぶと、`excludeCredentials` に当たっても拒否されず、「既存をアップデート」が出た。選んでも新しい鍵として追加された（docs/02 §1.2、K11）。重複した鍵は「削除」で消せる
+- 1Password の項目の「最終編集」時刻と、一覧の「作成」時刻を並べると、どの項目がどの鍵かを推測できる
+
 #### Signal API の効き方を見る
 
 削除した後に、パスワードマネージャーの `localhost` のパスキー一覧を見る。消した鍵が消えている、または隠れているかを確かめ、結果を docs/02 に書く。Chrome 132 以降が `signalAllAcceptedCredentials` に対応している（推測。Console で `typeof PublicKeyCredential.signalAllAcceptedCredentials` が `'function'` なら呼ばれる）。`docker compose down -v` の後に残った古いパスキーでログインを試すと、L1 で拒否されたときに `signalUnknownCredential` が呼ばれる。

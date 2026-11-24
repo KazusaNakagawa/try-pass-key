@@ -27,7 +27,23 @@
 - `PublicKeyCredential.signalAllAcceptedCredentials({ rpId, userId, allAcceptedCredentialIds })`: このユーザーで受け付ける鍵はこれだけ（それ以外は消してよい）
 - `PublicKeyCredential.signalCurrentUserDetails`: 表示名の変更を伝える（本PoCでは使わない）
 
-いずれもユーザーの操作なしで呼べ、結果は返らない（Promise は認証器が何をしたかを教えない）。消すか隠すかは認証器が決める。本PoCは M7 で、一覧の取得・削除の後に `signalAllAcceptedCredentials`、L1 で拒否されたログインの後に `signalUnknownCredential` を呼ぶ（`web/src/signal.ts`）。1Password や iCloud キーチェーンでの実際の効き方はまだ確かめていない（docs/03 の手順で確かめる）。
+いずれもユーザーの操作なしで呼べ、結果は返らない（Promise は認証器が何をしたかを教えない）。消すか隠すかは認証器が決める。本PoCは M7 で、一覧の取得・削除の後に `signalAllAcceptedCredentials`、L1 で拒否されたログインの後に `signalUnknownCredential` を呼ぶ（`web/src/signal.ts`）。
+
+実機（Chrome + 1Password、2026-11-24、[worklog](./worklog/2026-11-24.md)）で確かめたこと:
+
+- Chrome では `PublicKeyCredential.signalAllAcceptedCredentials` と `signalUnknownCredential` がどちらも関数として存在した。削除の後に Console に警告は出ていないので、呼び出しは失敗していないと考えられる（推測。`web/src/signal.ts` は失敗時に `console.warn` を出す）
+- サーバーで2本削除した後も、1Password の `localhost` の項目は消えなかった。Chrome が 1Password に通知を渡していないのか、1Password が通知を使っていないのかは切り分けていない（推測）
+- iCloud キーチェーン側の効き方は確かめていない
+
+### 1.2 `excludeCredentials` は認証器への依頼にすぎない
+
+`excludeCredentials` は「このどれかを持っている認証器では作らないで」という RP からの依頼で、作成を断る（`InvalidStateError`）のは認証器の役目である。サーバーは、返ってきた応答がどの認証器のものかを AAGUID でしか知らず、強制できない。
+
+- Chromium の仮想認証器（E2E）は守り、すでに鍵を持つ認証器では作成を拒否した
+- 1Password は守らなかった。同じユーザーへの2本目の追加で拒否せず、「既存をアップデート」を出した。選んでも新しい credential ID が返り、サーバーには新しい鍵として保存された。同じユーザーの 1Password の鍵が3本になった
+- 1Password の項目の最終編集時刻から見て、「アップデート」は既存の項目の鍵を置き換えたようだ。そうだとすると、サーバーには署名できなくなった鍵が残り、1Password にはサーバーにない鍵が残る（推測。各項目でのログインは試していない）
+
+本PoCでは、サーバー側で同じ AAGUID の鍵の追加を拒否することはしない（D49）。AAGUID は製品を表すだけで、別の 1Password アカウントや別の YubiKey の正当な追加まで拒否してしまう。重複した鍵は、利用者が一覧から削除する
 
 ## 2. 1Password などに保存したパスキーは盗まれるか
 
