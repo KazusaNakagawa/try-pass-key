@@ -36,21 +36,38 @@ export function createRegistrationOptions(
   });
   return {
     ceremonyId: id,
-    options: {
-      rp: { id: deps.config.rpId, name: RP_NAME },
-      user: { id: toBase64Url(userHandle), name: displayName, displayName },
-      challenge: toBase64Url(challenge),
-      pubKeyCredParams: SUPPORTED_ALGORITHMS.map((alg) => ({ type: 'public-key', alg })),
-      timeout: CHALLENGE_TTL_MS,
-      // A brand-new user has no credentials yet. Adding a second passkey (M7) fills this.
-      excludeCredentials: [],
-      authenticatorSelection: {
-        residentKey: 'required',
-        requireResidentKey: true,
-        userVerification: 'required',
-      },
-      attestation: 'none',
+    // A brand-new user has no credentials yet; adding a passkey fills excludeCredentials.
+    options: creationOptions(deps, { challenge, userHandle, displayName, excludeCredentials: [] }),
+  };
+}
+
+/** PublicKeyCredentialCreationOptions shared by a new account and an added passkey. */
+export function creationOptions(
+  deps: RegistrationDeps,
+  input: {
+    challenge: Buffer;
+    userHandle: Buffer;
+    displayName: string;
+    excludeCredentials: RegisterOptionsResponse['excludeCredentials'];
+  },
+): RegisterOptionsResponse {
+  return {
+    rp: { id: deps.config.rpId, name: RP_NAME },
+    user: {
+      id: toBase64Url(input.userHandle),
+      name: input.displayName,
+      displayName: input.displayName,
     },
+    challenge: toBase64Url(input.challenge),
+    pubKeyCredParams: SUPPORTED_ALGORITHMS.map((alg) => ({ type: 'public-key', alg })),
+    timeout: CHALLENGE_TTL_MS,
+    excludeCredentials: input.excludeCredentials,
+    authenticatorSelection: {
+      residentKey: 'required',
+      requireResidentKey: true,
+      userVerification: 'required',
+    },
+    attestation: 'none',
   };
 }
 
@@ -97,10 +114,34 @@ export function buildRegistrationContext(
   deps: RegistrationDeps,
   input: { response: RegistrationResponse; ceremonyId: string | undefined },
 ): RegistrationContext {
-  const clientData = parseClientDataJSON(input.response.response.clientDataJSON);
+  return buildCreationContext(deps, input.response, {
+    purpose: 'register',
+    ceremonyId: input.ceremonyId,
+    sessionUserId: undefined,
+    sessionId: undefined,
+  });
+}
+
+/** How a creation ceremony is bound: a new account by cookie, an added passkey by session. */
+export type CreationBinding =
+  | {
+      purpose: 'register';
+      ceremonyId: string | undefined;
+      sessionUserId: undefined;
+      sessionId: undefined;
+    }
+  | { purpose: 'add_credential'; ceremonyId: undefined; sessionUserId: string; sessionId: string };
+
+/** Shared by a new account (above) and adding a passkey (add-credential.ts). */
+export function buildCreationContext(
+  deps: RegistrationDeps,
+  response: RegistrationResponse,
+  binding: CreationBinding,
+): RegistrationContext {
+  const clientData = parseClientDataJSON(response.response.clientDataJSON);
   const challengeRow = findChallenge(deps.db, clientData.challenge);
   let decoded: DecodedRegistration | undefined;
-  const decode = () => (decoded ??= decodeRegistration(input.response));
+  const decode = () => (decoded ??= decodeRegistration(response));
 
   return {
     clientData,
@@ -115,16 +156,16 @@ export function buildRegistrationContext(
     },
     expected: {
       type: 'webauthn.create',
-      purpose: 'register',
+      purpose: binding.purpose,
       origin: deps.config.rpOrigin,
       rpIdHash: createHash('sha256').update(deps.config.rpId).digest(),
       algorithms: SUPPORTED_ALGORITHMS,
       now: deps.now(),
     },
     challengeRow,
-    ceremonyId: input.ceremonyId,
-    sessionUserId: undefined,
-    sessionId: undefined,
+    ceremonyId: binding.ceremonyId,
+    sessionUserId: binding.sessionUserId,
+    sessionId: binding.sessionId,
     consumeChallenge: () => (challengeRow ? consumeChallenge(deps.db, challengeRow.id) : false),
     isCredentialRegistered: (id) =>
       deps.db.prepare('SELECT 1 FROM credentials WHERE id = ?').get(id) !== undefined,
@@ -144,7 +185,7 @@ export function saveRegistration(
   }
   const userId = randomUUID();
   const now = deps.now().toISOString();
-  const { aaguid, credentialId, credentialPublicKey } = ctx.attestedCredentialData;
+  const { aaguid, credentialId } = ctx.attestedCredentialData;
   const { flags, signCount } = ctx.authData;
 
   deps.db.exec('BEGIN');
@@ -154,23 +195,7 @@ export function saveRegistration(
         'INSERT INTO users (id, user_handle, display_name, balance, created_at) VALUES (?, ?, ?, ?, ?)',
       )
       .run(userId, row.userHandle, row.displayName, INITIAL_BALANCE, now);
-    deps.db
-      .prepare(
-        `INSERT INTO credentials
-           (id, user_id, public_key, sign_count, transports, backup_eligible, backup_state, aaguid, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        credentialId,
-        userId,
-        credentialPublicKey,
-        signCount,
-        JSON.stringify(transports),
-        flags.be ? 1 : 0,
-        flags.bs ? 1 : 0,
-        formatAaguid(aaguid),
-        now,
-      );
+    insertCredential(deps.db, { userId, ctx, transports, now });
     deps.db.exec('COMMIT');
   } catch (err) {
     deps.db.exec('ROLLBACK');
@@ -192,7 +217,36 @@ export function saveRegistration(
   };
 }
 
-function formatAaguid(aaguid: Buffer): string {
+/** Stores the credential of a registration that passed every check. */
+export function insertCredential(
+  db: DatabaseSync,
+  input: {
+    userId: string;
+    ctx: RegistrationContext;
+    transports: readonly Transport[];
+    now: string;
+  },
+): void {
+  const { aaguid, credentialId, credentialPublicKey } = input.ctx.attestedCredentialData;
+  const { flags, signCount } = input.ctx.authData;
+  db.prepare(
+    `INSERT INTO credentials
+       (id, user_id, public_key, sign_count, transports, backup_eligible, backup_state, aaguid, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    credentialId,
+    input.userId,
+    credentialPublicKey,
+    signCount,
+    JSON.stringify(input.transports),
+    flags.be ? 1 : 0,
+    flags.bs ? 1 : 0,
+    formatAaguid(aaguid),
+    input.now,
+  );
+}
+
+export function formatAaguid(aaguid: Buffer): string {
   const hex = aaguid.toString('hex');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
