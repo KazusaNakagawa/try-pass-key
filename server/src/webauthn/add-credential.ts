@@ -1,10 +1,17 @@
-import type { RegisterOptionsResponse, RegistrationResponse, Transport } from '@app/shared';
+import type {
+  CredentialSummary,
+  RegisterOptionsResponse,
+  RegistrationResponse,
+  Transport,
+} from '@app/shared';
+import { credentialDescriptors } from '../credentials/credentials.js';
 import { toBase64Url } from './bytes.js';
 import { issueChallenge } from './challenges.js';
 import type { RegistrationContext } from './checks/types.js';
 import {
   buildCreationContext,
   creationOptions,
+  formatAaguid,
   insertCredential,
   type RegistrationDeps,
 } from './registration.js';
@@ -24,9 +31,6 @@ export function createAddCredentialOptions(
     .prepare('SELECT user_handle, display_name FROM users WHERE id = ?')
     .get(input.userId) as { user_handle: Uint8Array; display_name: string } | undefined;
   if (!user) throw new Error('session user does not exist');
-  const existing = deps.db
-    .prepare('SELECT id, transports FROM credentials WHERE user_id = ? ORDER BY created_at, rowid')
-    .all(input.userId) as { id: Uint8Array; transports: string }[];
   const { challenge } = issueChallenge(deps.db, deps.now(), {
     purpose: 'add_credential',
     userId: input.userId,
@@ -40,11 +44,7 @@ export function createAddCredentialOptions(
     ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
     // An authenticator that already holds one of them refuses (InvalidStateError)
     // instead of creating a second passkey, or overwriting the first, for this user.
-    excludeCredentials: existing.map((row) => ({
-      type: 'public-key' as const,
-      id: toBase64Url(Buffer.from(row.id)),
-      transports: JSON.parse(row.transports) as Transport[],
-    })),
+    excludeCredentials: credentialDescriptors(deps.db, input.userId),
   });
 }
 
@@ -69,28 +69,24 @@ export function saveAddedCredential(
   deps: RegistrationDeps,
   ctx: RegistrationContext,
   transports: readonly Transport[],
-): {
-  userId: string;
-  credential: {
-    id: string;
-    backupEligible: boolean;
-    backupState: boolean;
-    transports: Transport[];
-  };
-} {
+): { userId: string; credential: CredentialSummary } {
   const userId = ctx.challengeRow?.userId;
   if (!userId) {
     // Unreachable when C2 passed: the schema requires user_id on add_credential rows.
     throw new Error('add_credential challenge row has no user');
   }
-  insertCredential(deps.db, { userId, ctx, transports, now: deps.now().toISOString() });
+  const now = deps.now().toISOString();
+  insertCredential(deps.db, { userId, ctx, transports, now });
   const { flags } = ctx.authData;
   return {
     userId,
     credential: {
       id: toBase64Url(ctx.attestedCredentialData.credentialId),
+      createdAt: now,
+      lastUsedAt: null,
       backupEligible: flags.be,
       backupState: flags.bs,
+      aaguid: formatAaguid(ctx.attestedCredentialData.aaguid),
       transports: [...transports],
     },
   };

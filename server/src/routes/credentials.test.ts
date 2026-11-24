@@ -209,7 +209,28 @@ describe('adding a passkey', () => {
     const res = await addCredential(user);
     const { inspection } = AddCredentialVerifyResponse.parse(await res.json());
     expect(inspection?.ceremony).toBe('add_credential');
-    expect(inspection?.checks.map((c) => c.id)).toEqual(REGISTRATION_CHECKS.map((c) => c.id));
+    // The registration checks, then the operation gate that runs before saving.
+    expect(inspection?.checks.map((c) => c.id)).toEqual([
+      ...REGISTRATION_CHECKS.map((c) => c.id),
+      'S3',
+      'S2',
+    ]);
+    expect(inspection?.checks.every((c) => c.result === 'pass')).toBe(true);
+  });
+
+  it('shows the gate as the failing row when the approval is gone at verify', async () => {
+    const user = await registerUser(server.baseUrl);
+    await stepUp(user, ADD);
+    const options = await addCredentialOptions(user);
+    await user.browser.request('POST', '/api/transfer', { to: 'test-account-1', amount: 1 });
+    const res = await submitAddCredential(user, options, new SoftAuthenticator());
+    expect(res.status).toBe(401);
+    const { inspection } = ApiError.parse(await res.json());
+    const resultOf = (id: string) => inspection?.checks.find((c) => c.id === id)?.result;
+    expect(resultOf('R5')).toBe('pass');
+    expect(resultOf('S3')).toBe('fail');
+    expect(resultOf('S2')).toBe('not_run');
+    expect(inspection?.failure?.check).toBe('S3');
   });
 });
 

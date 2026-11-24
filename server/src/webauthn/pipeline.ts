@@ -106,9 +106,15 @@ export const OPERATION_GATE_CHECKS: readonly Check<OperationGateContext>[] = Obj
   S2,
 ]);
 
-/** Runs the frozen operation gate. Routes call this, never runChecks with a list. */
-export function runOperationGate(ctx: OperationGateContext): void {
-  runChecks(ctx, OPERATION_GATE_CHECKS);
+/**
+ * Runs the frozen operation gate. Routes call this, never runChecks with a list.
+ * `onResult` only observes, as in runChecks (the inspection of adding a passkey).
+ */
+export function runOperationGate(
+  ctx: OperationGateContext,
+  onResult?: (id: CheckId, result: 'pass' | 'fail') => void,
+): void {
+  runChecks(ctx, OPERATION_GATE_CHECKS, onResult);
 }
 
 /**

@@ -1,8 +1,7 @@
 /**
  * Names for a few common authenticators, so the passkey list can tell them
- * apart. Checked against the public passkey AAGUID list (passkeydeveloper /
- * passkey-authenticator-aaguids, aaguid.json) on 2026-11-24. Anything else is
- * shown as its AAGUID.
+ * apart. Checked against the public, community-maintained list of passkey
+ * provider AAGUIDs on 2026-11-24. Anything else is shown as its AAGUID.
  */
 const NAMES: ReadonlyMap<string, string> = new Map([
   ['bada5566-a7aa-401f-bd96-45619a55120d', '1Password'],

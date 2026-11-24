@@ -4,6 +4,7 @@ import {
   recordAssertion,
   type AuthenticationDeps,
 } from './authentication.js';
+import { credentialDescriptors } from '../credentials/credentials.js';
 import { inTransaction } from '../db.js';
 import { HttpError } from '../http/errors.js';
 import { rotateSession, type Session } from '../session/sessions.js';
@@ -22,20 +23,13 @@ export function createStepupOptions(
   input: { userId: string; sessionId: string; txHash: string },
 ): StepupOptionsResponse {
   const { challenge } = issueChallenge(deps.db, deps.now(), { purpose: 'stepup', ...input });
-  const rows = deps.db
-    .prepare('SELECT id, transports FROM credentials WHERE user_id = ? ORDER BY created_at')
-    .all(input.userId) as { id: Uint8Array; transports: string }[];
   return {
     challenge: toBase64Url(challenge),
     rpId: deps.config.rpId,
     timeout: CHALLENGE_TTL_MS,
     userVerification: 'required',
     // Only asks the browser to offer these; S1 is what enforces it.
-    allowCredentials: rows.map((row) => ({
-      type: 'public-key' as const,
-      id: toBase64Url(Buffer.from(row.id)),
-      transports: JSON.parse(row.transports) as string[],
-    })),
+    allowCredentials: credentialDescriptors(deps.db, input.userId),
   };
 }
 

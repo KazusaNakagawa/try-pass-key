@@ -21,12 +21,30 @@ export function listCredentials(db: DatabaseSync, userId: string): CredentialSum
     )
     .all(userId) as unknown as CredentialRow[];
   return rows.map((row) => ({
-    id: toBase64Url(Buffer.from(row.id)),
+    id: toBase64Url(row.id),
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at,
     backupEligible: row.backup_eligible === 1,
     backupState: row.backup_state === 1,
     aaguid: row.aaguid,
+    transports: JSON.parse(row.transports) as Transport[],
+  }));
+}
+
+/**
+ * The user's passkeys as PublicKeyCredentialDescriptors, oldest first: the
+ * allowCredentials of a step-up and the excludeCredentials of adding a passkey.
+ */
+export function credentialDescriptors(
+  db: DatabaseSync,
+  userId: string,
+): { type: 'public-key'; id: string; transports: Transport[] }[] {
+  const rows = db
+    .prepare('SELECT id, transports FROM credentials WHERE user_id = ? ORDER BY created_at, rowid')
+    .all(userId) as { id: Uint8Array; transports: string }[];
+  return rows.map((row) => ({
+    type: 'public-key' as const,
+    id: toBase64Url(row.id),
     transports: JSON.parse(row.transports) as Transport[],
   }));
 }

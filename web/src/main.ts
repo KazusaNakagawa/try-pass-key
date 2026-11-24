@@ -54,7 +54,8 @@ const message = (err: unknown) => (err instanceof Error ? err.message : String(e
 const inspectionOf = (err: unknown) =>
   err instanceof ApiRequestError ? err.body?.inspection : undefined;
 
-function showMe(me: MeResponse | undefined): void {
+/** `refreshLists: false` when the caller has already shown the lists it changed. */
+function showMe(me: MeResponse | undefined, { refreshLists = true } = {}): void {
   ui.me.textContent = me
     ? `ログイン中: ${me.displayName}\n${JSON.stringify(me, null, 2)}`
     : 'ログインしていません';
@@ -62,7 +63,7 @@ function showMe(me: MeResponse | undefined): void {
   ui.loginSection.hidden = Boolean(me);
   ui.transferSection.hidden = !me;
   ui.passkeySection.hidden = !me;
-  if (me) {
+  if (me && refreshLists) {
     void refreshTransfers();
     void refreshPasskeys();
   }
@@ -166,7 +167,9 @@ ui.passkeyAdd.addEventListener('click', () => {
       if (inspection) showInspection(ui.inspector, inspection);
     })
     .finally(async () => {
-      await refreshMe();
+      // #me shows the new stepupAt; only the passkey list changed.
+      await refreshMe({ refreshLists: false });
+      await refreshPasskeys();
       setPasskeyBusy(false);
     });
 });
@@ -177,23 +180,26 @@ function onDeletePasskey(credentialId: string): void {
   deletePasskey(credentialId, passkeyStepUpHooks)
     .then((list) => {
       ui.passkeyResult.textContent = 'パスキーを削除しました';
+      // Already signalled to the authenticator by deletePasskey.
       showPasskeys(list);
     })
-    .catch((err: unknown) => {
+    .catch(async (err: unknown) => {
       ui.passkeyResult.textContent = `パスキーを削除できませんでした\n${message(err)}`;
       const inspection = inspectionOf(err);
       if (inspection) showInspection(ui.inspector, inspection);
+      await refreshPasskeys();
     })
     .finally(async () => {
-      await refreshMe();
+      // #me shows the new stepupAt; the list was shown above.
+      await refreshMe({ refreshLists: false });
       setPasskeyBusy(false);
     });
 }
 
-async function refreshMe(): Promise<MeResponse | undefined> {
+async function refreshMe(options?: { refreshLists: boolean }): Promise<MeResponse | undefined> {
   const res = await fetch('/api/me');
   const me = res.ok ? MeResponse.parse(await res.json()) : undefined;
-  showMe(me);
+  showMe(me, options);
   return me;
 }
 

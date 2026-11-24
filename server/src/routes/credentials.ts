@@ -14,6 +14,7 @@ import {
   listCredentials,
 } from '../credentials/credentials.js';
 import { HttpError } from '../http/errors.js';
+import { toBase64Url } from '../webauthn/bytes.js';
 import { approvalTimeLeft, buildOperationGateContext } from '../operations/gate.js';
 import { currentSession, requireSession, type SessionDeps } from '../session/http.js';
 import {
@@ -77,22 +78,19 @@ export function credentialRoutes(deps: SessionDeps): Router {
       config: deps.config,
       res,
       // After every registration check, so a broken response does not use the approval up.
-      save: () => {
+      save: (record) => {
         runOperationGate(
           buildOperationGateContext(deps, {
             sessionId: session.id,
             op: { kind: 'add_credential' },
           }),
+          record,
         );
         return saveAddedCredential(deps, ctx, response.response.transports ?? []);
       },
     });
-    const credential = listCredentials(deps.db, saved.userId).find(
-      (c) => c.id === saved.credential.id,
-    );
-    if (!credential) throw new Error('the added passkey was not stored');
     const body: AddCredentialVerifyResponse = {
-      credential,
+      credential: saved.credential,
       ...(inspection ? { inspection } : {}),
     };
     res.json(body);
@@ -141,7 +139,7 @@ function credentialsOf(deps: { db: DatabaseSync; config: Config }, userId: strin
   if (!user) throw new HttpError(401, 'unauthenticated', 'the user no longer exists');
   return {
     rpId: deps.config.rpId,
-    userHandle: Buffer.from(user.user_handle).toString('base64url'),
+    userHandle: toBase64Url(user.user_handle),
     credentials: listCredentials(deps.db, userId),
   };
 }
