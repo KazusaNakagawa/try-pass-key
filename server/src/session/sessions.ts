@@ -91,6 +91,34 @@ export function loadSession(db: DatabaseSync, token: string, now: Date): Session
   };
 }
 
+/**
+ * Step-up: replaces the session with a new token (docs/01 §8, re-issue on
+ * step-up) and records the approval on it. auth_at and the absolute timeout are
+ * kept, so stepping up never extends a session. Returns undefined if the old
+ * session is gone.
+ */
+export function rotateSession(
+  db: DatabaseSync,
+  oldToken: string,
+  now: Date,
+  approval: { txHash: string },
+): { token: string; session: Session } | undefined {
+  const old = db
+    .prepare('DELETE FROM sessions WHERE id = ? RETURNING user_id, auth_at, expires_at')
+    .get(hashToken(oldToken)) as
+    { user_id: string; auth_at: string; expires_at: string } | undefined;
+  if (!old) return undefined;
+  const token = randomBytes(32).toString('base64url');
+  const at = now.toISOString();
+  db.prepare(
+    `INSERT INTO sessions
+       (id, user_id, auth_at, last_seen_at, stepup_at, approved_tx_hash, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(hashToken(token), old.user_id, old.auth_at, at, at, approval.txHash, old.expires_at);
+  const session = loadSession(db, token, now);
+  return session ? { token, session } : undefined;
+}
+
 export function destroySession(db: DatabaseSync, token: string): void {
   db.prepare('DELETE FROM sessions WHERE id = ?').run(hashToken(token));
 }

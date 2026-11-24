@@ -51,7 +51,24 @@ export function buildAuthenticationContext(
   deps: AuthenticationDeps,
   input: { response: AuthenticationResponse; ceremonyId: string | undefined },
 ): AuthenticationContext {
-  const { response } = input;
+  return buildAssertionContext(deps, input.response, {
+    purpose: 'login',
+    ceremonyId: input.ceremonyId,
+    sessionUserId: undefined,
+  });
+}
+
+/**
+ * Shared by login and step-up (stepup.ts): both verify an assertion. The purpose
+ * decides which challenge rows C2 accepts and how C5 binds the challenge.
+ */
+export function buildAssertionContext(
+  deps: AuthenticationDeps,
+  response: AuthenticationResponse,
+  binding:
+    | { purpose: 'login'; ceremonyId: string | undefined; sessionUserId: undefined }
+    | { purpose: 'stepup'; ceremonyId: undefined; sessionUserId: string },
+): AuthenticationContext {
   const clientData = parseClientDataJSON(response.response.clientDataJSON);
   const challengeRow = findChallenge(deps.db, clientData.challenge);
   let decoded: DecodedAuthentication | undefined;
@@ -76,14 +93,14 @@ export function buildAuthenticationContext(
     },
     expected: {
       type: 'webauthn.get',
-      purpose: 'login',
+      purpose: binding.purpose,
       origin: deps.config.rpOrigin,
       rpIdHash: createHash('sha256').update(deps.config.rpId).digest(),
       now: deps.now(),
     },
     challengeRow,
-    ceremonyId: input.ceremonyId,
-    sessionUserId: undefined,
+    ceremonyId: binding.ceremonyId,
+    sessionUserId: binding.sessionUserId,
     consumeChallenge: () => (challengeRow ? consumeChallenge(deps.db, challengeRow.id) : false),
   };
 }
@@ -147,15 +164,27 @@ export function findUserByHandle(db: DatabaseSync, userHandle: Buffer): UserReco
  */
 export function saveAuthentication(deps: AuthenticationDeps, ctx: AuthenticationContext) {
   const user = ctx.userByHandle;
-  const credential = ctx.credential;
-  if (!user || !credential) {
+  if (!user || !ctx.credential) {
     // Unreachable when L1 and L2 passed.
     throw new Error('authentication context is incomplete');
   }
+  return { user, credential: recordAssertion(deps, ctx) };
+}
+
+/**
+ * Stores the counter and backup state of a verified assertion (login or step-up).
+ *
+ * A4 compared against the counter read when the context was built. Re-check it
+ * in the UPDATE itself: two assertions with the same key (original and clone)
+ * can both pass A4, and only the first may record its counter.
+ */
+export function recordAssertion(
+  deps: AuthenticationDeps,
+  ctx: AuthenticationContext,
+): { id: string; signCount: number; backupState: boolean } {
+  const credential = ctx.credential;
+  if (!credential) throw new Error('authentication context has no credential');
   const { signCount, flags } = ctx.authData;
-  // A4 compared against the counter read when the context was built. Re-check it
-  // in the UPDATE itself: two logins with the same key (original and clone) can
-  // both pass A4, and only the first may record its counter.
   const result = deps.db
     .prepare(
       `UPDATE credentials SET sign_count = ?, backup_state = ?, last_used_at = ?
@@ -172,8 +201,5 @@ export function saveAuthentication(deps: AuthenticationDeps, ctx: Authentication
   if (Number(result.changes) === 0) {
     throw new CheckError('A4', 'signCount was updated by a concurrent login');
   }
-  return {
-    user,
-    credential: { id: toBase64Url(credential.id), signCount, backupState: flags.bs },
-  };
+  return { id: toBase64Url(credential.id), signCount, backupState: flags.bs };
 }

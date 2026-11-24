@@ -15,7 +15,9 @@ interface DbChallengeRow {
 }
 
 export type ChallengeInput =
-  { purpose: 'register'; userHandle: Buffer; displayName: string } | { purpose: 'login' };
+  | { purpose: 'register'; userHandle: Buffer; displayName: string }
+  | { purpose: 'login' }
+  | { purpose: 'stepup'; userId: string; txHash: string };
 
 export function issueChallenge(
   db: DatabaseSync,
@@ -26,14 +28,17 @@ export function issueChallenge(
   const challenge = randomBytes(32);
   const expiresAt = new Date(now.getTime() + CHALLENGE_TTL_MS).toISOString();
   db.prepare(
-    `INSERT INTO challenges (id, challenge, purpose, user_handle, display_name, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO challenges
+       (id, challenge, purpose, user_handle, display_name, user_id, tx_hash, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     challenge,
     input.purpose,
     input.purpose === 'register' ? input.userHandle : null,
     input.purpose === 'register' ? input.displayName : null,
+    input.purpose === 'stepup' ? input.userId : null,
+    input.purpose === 'stepup' ? input.txHash : null,
     expiresAt,
   );
   return { id, challenge };
