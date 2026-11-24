@@ -1,4 +1,6 @@
 import { HealthResponse, MeResponse } from '@app/shared';
+import { ApiRequestError } from './api.js';
+import { showInspection } from './inspector.js';
 import { cancelConditionalUI, loginWithPasskey, supportsConditionalUI } from './login.js';
 import { registerPasskey } from './register.js';
 
@@ -19,9 +21,14 @@ const ui = {
   displayName: $('#display-name', HTMLInputElement),
   registerResult: $('#register-result', HTMLPreElement),
   health: $('#health', HTMLPreElement),
+  inspector: $('#inspector', HTMLDivElement),
 };
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+/** Shows the rejected ceremony when the server got far enough to inspect it. */
+const inspectionOf = (err: unknown) =>
+  err instanceof ApiRequestError ? err.body?.inspection : undefined;
 
 function showMe(me: MeResponse | undefined): void {
   ui.me.textContent = me
@@ -49,11 +56,13 @@ async function startConditionalUI(): Promise<void> {
     const result = await loginWithPasskey(true);
     conditionalFailures = 0;
     ui.loginResult.textContent = `ログインしました（オートフィル）\n${JSON.stringify(result, null, 2)}`;
+    showInspection(ui.inspector, result.inspection);
     showMe(result.me);
   } catch (err) {
     // AbortError: another ceremony replaced this one. Not worth showing.
     if (err instanceof Error && err.name === 'AbortError') return;
     ui.loginResult.textContent = `ログインできませんでした\n${message(err)}`;
+    showInspection(ui.inspector, inspectionOf(err));
     restartConditionalUI();
   }
 }
@@ -72,10 +81,12 @@ ui.loginButton.addEventListener('click', () => {
     .then((result) => {
       conditionalFailures = 0;
       ui.loginResult.textContent = `ログインしました\n${JSON.stringify(result, null, 2)}`;
+      showInspection(ui.inspector, result.inspection);
       showMe(result.me);
     })
     .catch((err: unknown) => {
       ui.loginResult.textContent = `ログインできませんでした\n${message(err)}`;
+      showInspection(ui.inspector, inspectionOf(err));
       // Dismissing the passkey sheet or a server rejection: offer autofill again.
       restartConditionalUI();
     });
@@ -88,10 +99,12 @@ ui.registerForm.addEventListener('submit', (event) => {
     .then(() => registerPasskey(ui.displayName.value))
     .then(async (result) => {
       ui.registerResult.textContent = `登録しました\n${JSON.stringify(result, null, 2)}`;
+      showInspection(ui.inspector, result.inspection);
       await refreshMe();
     })
     .catch((err: unknown) => {
       ui.registerResult.textContent = `登録できませんでした\n${message(err)}`;
+      showInspection(ui.inspector, inspectionOf(err));
       restartConditionalUI();
     });
 });
