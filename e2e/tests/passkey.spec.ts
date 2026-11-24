@@ -166,3 +166,53 @@ test('a failed login message does not linger after registering', async ({ page }
   await expect(page.locator('#me')).toContainText('ログイン中: test-user-e2e-7');
   await expect(page.locator('#login-result')).toBeHidden();
 });
+
+test('passkeys: add a second one behind a step-up, log in with it, delete the first', async ({
+  page,
+}) => {
+  // One virtual authenticator at a time, so which one answers is never a guess.
+  const a = await addVirtualAuthenticator(page);
+  await register(page, 'test-user-e2e-8');
+  const rows = page.locator('#passkey-list li');
+  const add = page.locator('#passkey-add');
+  const result = page.locator('#passkey-result');
+  await expect(rows).toHaveCount(1);
+  // The last passkey cannot be deleted.
+  await expect(rows.first().locator('button.passkey-delete')).toBeDisabled();
+
+  // A approves the step-up, then refuses to create a second passkey for the same
+  // user (excludeCredentials): the approval is kept for a retry.
+  await add.click();
+  await expect(result).toContainText('パスキーを作成できませんでした');
+  await expect(page.locator('#inspector')).toContainText('ステップアップ（受理）');
+  let stepups = 0;
+  await page.route('**/api/stepup/options', async (route) => {
+    stepups++;
+    await route.continue();
+  });
+
+  // Switch to authenticator B and retry: no second step-up within the approval.
+  await a.cdp.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId: a.id });
+  const b = await addVirtualAuthenticator(page);
+  await add.click();
+  await expect(result).toContainText('パスキーを追加しました');
+  expect(stepups).toBe(0);
+  await expect(rows).toHaveCount(2);
+  await expect(page.locator('#inspector')).toContainText('パスキー追加（受理）');
+  await expect(page.locator('#inspector')).not.toContainText('✗');
+  const onB = await b.cdp.send('WebAuthn.getCredentials', { authenticatorId: b.id });
+  expect(onB.credentials).toHaveLength(1);
+
+  // B alone logs in to the same account (Conditional UI answers at once).
+  await page.locator('#logout').click();
+  await expect(page.locator('#login-result')).toContainText('ログインしました（オートフィル）');
+  await expect(page.locator('#me')).toContainText('ログイン中: test-user-e2e-8');
+
+  // Delete A's passkey (the oldest row): B approves the step-up for it.
+  await expect(rows).toHaveCount(2);
+  await rows.first().locator('button.passkey-delete').click();
+  await expect(result).toContainText('パスキーを削除しました');
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first().locator('button.passkey-delete')).toBeDisabled();
+  expect(stepups).toBe(1);
+});

@@ -7,7 +7,7 @@
  */
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { transferTxHash } from '../src/transfer/tx-hash.js';
+import { operationHash } from '../src/operations/operation-hash.js';
 import {
   CheckError,
   type Check,
@@ -17,7 +17,7 @@ import {
 import { runChecks, STEPUP_CHECKS } from '../src/webauthn/pipeline.js';
 import { saveStepup } from '../src/webauthn/stepup.js';
 import { SoftAuthenticator, type AssertionOverrides } from './soft-authenticator.js';
-import { StepupHarness, TX } from './stepup-harness.js';
+import { StepupHarness, TRANSFER_OP } from './stepup-harness.js';
 
 type Checks = readonly Check<StepupContext>[];
 
@@ -84,7 +84,7 @@ const scenarios: Scenario[] = [
     run: (checks) => {
       const h = new StepupHarness();
       const victim = h.register();
-      const response = h.stepupResponse(h.beginStepup(victim, TX, 'session-a'), victim);
+      const response = h.stepupResponse(h.beginStepup(victim, TRANSFER_OP, 'session-a'), victim);
       runChecks(h.stepupContext(response, victim.userId, 'session-b'), checks);
     },
   },
@@ -171,7 +171,7 @@ describe('step-up attacks', () => {
     const h = new StepupHarness();
     const ctx = h.validStepupContext(h.register(), overrides);
     runChecks(ctx, STEPUP_CHECKS);
-    expect(saveStepup(h.deps, ctx).txHash).toBe(transferTxHash(TX));
+    expect(saveStepup(h.deps, ctx).txHash).toBe(operationHash(TRANSFER_OP));
   });
 
   describe.each(scenarios)('$check: $attack', (s) => {
@@ -207,7 +207,7 @@ describe('step-up attacks', () => {
     );
     expect(ctx.credential?.userId).toBe(attacker.userId);
     // The approval would be recorded on the victim's session for the victim's transfer.
-    expect(saveStepup(h.deps, ctx).txHash).toBe(transferTxHash(TX));
+    expect(saveStepup(h.deps, ctx).txHash).toBe(operationHash(TRANSFER_OP));
   });
 
   it("C5 also rejects the victim's response in another user's session (S1 would too)", () => {

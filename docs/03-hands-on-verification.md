@@ -91,7 +91,43 @@ await (await fetch('/api/transfer', { method: 'POST', headers: { 'content-type':
 
 `{ error: 'step_up_required', check: 'S3', ... }` が返り、残高は変わらない。ログイン済みでも、承認がなければ送金できない（docs/01 §12 の受け入れ基準）。
 
-金額の改ざん（S2）、期限切れ・2回目の送金（S3）、他人の鍵（S1）はブラウザ操作では作りにくい（画面は承認した内容のまま送り直し、候補には自分の鍵しか出ない）。自動テスト（`server/test/transfer-gate-attacks.test.ts`、`server/test/stepup-attacks.test.ts`、`server/src/routes/transfer.test.ts`）で再現している。
+金額の改ざん（S2）、期限切れ・2回目の送金（S3）、他人の鍵（S1）はブラウザ操作では作りにくい（画面は承認した内容のまま送り直し、候補には自分の鍵しか出ない）。自動テスト（`server/test/operation-gate-attacks.test.ts`、`server/test/stepup-attacks.test.ts`、`server/src/routes/transfer.test.ts`）で再現している。
+
+### パスキーを追加・削除する（M7）
+
+ログイン中は「パスキー」に、そのユーザーのパスキーが古い順に並ぶ。名前は AAGUID から引く（1Password、Apple Passwords、Google パスワードマネージャーなど。知らないものは AAGUID のまま）。M7 でスキーマが版 4 になったので、それより前の DB は `docker compose down -v` で作り直す。
+
+1. 「パスキーを追加」を押す。まずステップアップ（ログイン中のユーザーの鍵で承認）が出る
+2. 続けて新しいパスキーの作成が出る。**今のパスキーとは別の保存先**を選ぶ（例: 1Password で登録したなら、iCloud キーチェーンやスマホ）。同じ保存先を選ぶと `excludeCredentials` に当たって作成が拒否され、「パスキーを作成できませんでした」と出る
+3. 拒否・キャンセルの後に、承認が残っているうち（残り1分以上。承認から4分以内）にもう一度押すと、ステップアップなしで作成からやり直せる。その間に送金や削除を試すと承認は消え、次はステップアップから始まる（D48）
+4. 「パスキーを追加しました」と出て一覧が2行になる。「直近の ceremony」に `パスキー追加（受理）` が出る
+5. ログアウトし、追加した方のパスキーだけでログインできることを確かめる（同じユーザーになる）
+6. どちらかの行の「削除」を押す。ステップアップ（その鍵の削除の承認）の後に一覧が1行になる。1行だけのときは削除ボタンが押せない
+
+DB では `credentials` が2行になり、`user_id` が同じ。追加中は `challenges` に `purpose = 'add_credential'` の行があり、`user_id` と `session_id` が入り、`tx_hash` は NULL。
+
+```sql
+SELECT hex(id), user_id, aaguid, backup_eligible, backup_state, created_at, last_used_at FROM credentials;
+SELECT purpose, user_id, session_id, tx_hash FROM challenges;
+```
+
+ステップアップなしの削除が拒否されることは、Console から確かめられる（`<id>` は一覧の行の `data-credential-id`）。
+
+```js
+await (await fetch('/api/credentials/<id>', { method: 'DELETE' })).json()
+```
+
+`{ error: 'step_up_required', check: 'S3', ... }` が返る。
+
+#### 実機での結果（2026-11-24、Chrome + 1Password）
+
+- Apple Passwords（iCloud キーチェーン）での2本目の追加、2本の削除、最後の1本の削除ボタンが押せないことを確かめた
+- 1Password を選ぶと、`excludeCredentials` に当たっても拒否されず、「既存をアップデート」が出た。選んでも新しい鍵として追加された（docs/02 §1.2、K11）。重複した鍵は「削除」で消せる
+- 1Password の項目の「最終編集」時刻と、一覧の「作成」時刻を並べると、どの項目がどの鍵かを推測できる
+
+#### Signal API の効き方を見る
+
+削除した後に、パスワードマネージャーの `localhost` のパスキー一覧を見る。消した鍵が消えている、または隠れているかを確かめ、結果を docs/02 に書く。Chrome 132 以降が `signalAllAcceptedCredentials` に対応している（推測。Console で `typeof PublicKeyCredential.signalAllAcceptedCredentials` が `'function'` なら呼ばれる）。`docker compose down -v` の後に残った古いパスキーでログインを試すと、L1 で拒否されたときに `signalUnknownCredential` が呼ばれる。
 
 ## 3. DB の中身を見る
 

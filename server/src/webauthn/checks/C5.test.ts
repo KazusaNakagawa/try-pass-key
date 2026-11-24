@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { expectRejectedBy } from '../../../test/expect-check.js';
 import { LoginHarness } from '../../../test/login-harness.js';
 import { RegistrationHarness } from '../../../test/registration-harness.js';
+import { AddCredentialHarness } from '../../../test/add-credential-harness.js';
 import { C5 } from './C5.js';
 
 describe('C5 challenge bound to the requesting browser', () => {
@@ -68,6 +69,36 @@ describe('C5 for step-up: challenge bound to the session that asked for it', () 
   it('rejects a row without a session', () => {
     expectRejectedBy(() => {
       C5.run(stepupContext(null, 'session-a'));
+    }, 'C5');
+  });
+});
+
+describe('C5 for adding a passkey: challenge bound to the session that asked for it', () => {
+  /** An add_credential row issued to `rowSessionId`; the response arrives with `sessionId`. */
+  function addContext(rowSessionId: string, sessionId: string | undefined) {
+    const h = new AddCredentialHarness();
+    const begun = h.beginAdd(h.victim, rowSessionId);
+    return h.addContext(h.respondAdd(begun), {
+      sessionUserId: h.victim.userId,
+      sessionId: sessionId as string,
+    });
+  }
+
+  it('accepts without a ceremony cookie when the row was issued to this session', () => {
+    expect(() => {
+      C5.run(addContext('session-a', 'session-a'));
+    }).not.toThrow();
+  });
+
+  it('rejects a challenge issued to another session', () => {
+    expectRejectedBy(() => {
+      C5.run(addContext('session-a', 'session-b'));
+    }, 'C5');
+  });
+
+  it('rejects when there is no session', () => {
+    expectRejectedBy(() => {
+      C5.run(addContext('session-a', undefined));
     }, 'C5');
   });
 });

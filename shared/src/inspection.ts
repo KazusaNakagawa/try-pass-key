@@ -9,7 +9,7 @@ export const CheckResult = z.enum(['pass', 'fail', 'not_run']);
 export type CheckResult = z.infer<typeof CheckResult>;
 
 export const CeremonyInspection = z.object({
-  ceremony: z.enum(['register', 'login', 'stepup']),
+  ceremony: z.enum(['register', 'login', 'stepup', 'add_credential']),
   expected: z.object({
     type: z.string(),
     origin: z.string(),

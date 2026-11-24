@@ -80,11 +80,22 @@
         <ul id="transfer-history"></ul>
       </section>
 
+      <!-- Logged in only. -->
+      <section id="passkey-section" hidden>
+        <h2>パスキー</h2>
+        <p>
+          追加と削除の前に、登録済みのパスキーでもう一度本人確認します（ステップアップ）。最後の1本は削除できません。
+        </p>
+        <ul id="passkey-list"></ul>
+        <button id="passkey-add" type="button">パスキーを追加</button>
+        <pre id="passkey-result" aria-live="polite"></pre>
+      </section>
+
       <!-- Shown once a verify response carries an inspection (server INSPECTION=on). -->
       <section id="inspector-section" hidden>
         <h2>直近の ceremony</h2>
         <p>
-          登録・ログイン・ステップアップでブラウザと認証器が送った値、サーバーの期待値、検証項目（docs/01
+          登録・ログイン・ステップアップ・パスキー追加でブラウザと認証器が送った値、サーバーの期待値、検証項目（docs/01
           §6）の結果。サーバーで INSPECTION=on のときだけ表示されます。
         </p>
         <div id="inspector" aria-live="polite">まだありません</div>

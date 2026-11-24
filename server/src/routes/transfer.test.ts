@@ -13,6 +13,7 @@ afterAll(() => {
 });
 
 const TX = { to: 'test-account-1', amount: 1000 };
+const OP = { kind: 'transfer', ...TX } as const;
 
 async function expectStepUpRequired(res: Response, check: 'S2' | 'S3') {
   expect(res.status).toBe(401);
@@ -33,7 +34,7 @@ describe('POST /api/transfer', () => {
 
   it('moves money after the step-up approved this transfer', async () => {
     const user = await registerUser(server.baseUrl);
-    await stepUp(user, TX);
+    await stepUp(user, OP);
     const res = await user.browser.request('POST', '/api/transfer', TX);
     expect(res.status).toBe(200);
     expect(TransferResponse.parse(await res.json()).balance).toBe(99_000);
@@ -46,14 +47,14 @@ describe('POST /api/transfer', () => {
 
   it('refuses a transfer changed after the approval (S2)', async () => {
     const user = await registerUser(server.baseUrl);
-    await stepUp(user, TX);
+    await stepUp(user, OP);
     const res = await user.browser.request('POST', '/api/transfer', { ...TX, amount: 9000 });
     await expectStepUpRequired(res, 'S2');
   });
 
   it('refuses an approval older than 5 minutes (S3)', async () => {
     const user = await registerUser(server.baseUrl);
-    await stepUp(user, TX);
+    await stepUp(user, OP);
     const old = new Date(Date.now() - 6 * 60 * 1000).toISOString();
     server.db.prepare('UPDATE sessions SET stepup_at = ? WHERE user_id = ?').run(old, user.userId);
     await expectStepUpRequired(await user.browser.request('POST', '/api/transfer', TX), 'S3');
@@ -61,7 +62,7 @@ describe('POST /api/transfer', () => {
 
   it('refuses a second transfer on one approval (S3)', async () => {
     const user = await registerUser(server.baseUrl);
-    await stepUp(user, TX);
+    await stepUp(user, OP);
     expect((await user.browser.request('POST', '/api/transfer', TX)).status).toBe(200);
     await expectStepUpRequired(await user.browser.request('POST', '/api/transfer', TX), 'S3');
   });
@@ -76,7 +77,7 @@ describe('POST /api/transfer', () => {
       new Date(),
     );
     other.cookies.set('session', token);
-    await stepUp(user, TX);
+    await stepUp(user, OP);
     await expectStepUpRequired(await other.request('POST', '/api/transfer', TX), 'S3');
     expect((await user.browser.request('POST', '/api/transfer', TX)).status).toBe(200);
   });
@@ -84,14 +85,14 @@ describe('POST /api/transfer', () => {
   it('does not let another browser use the approval', async () => {
     const user = await registerUser(server.baseUrl, 'test-user-1');
     const other = await registerUser(server.baseUrl, 'test-user-2');
-    await stepUp(user, TX);
+    await stepUp(user, OP);
     await expectStepUpRequired(await other.browser.request('POST', '/api/transfer', TX), 'S3');
     expect((await user.browser.request('POST', '/api/transfer', TX)).status).toBe(200);
   });
 
   it('rejects a malformed request without using the approval', async () => {
     const user = await registerUser(server.baseUrl);
-    await stepUp(user, TX);
+    await stepUp(user, OP);
     const bad = await user.browser.request('POST', '/api/transfer', { to: '  ', amount: 0 });
     expect(bad.status).toBe(400);
     expect(ApiError.parse(await bad.json()).error).toBe('invalid_request');

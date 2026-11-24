@@ -37,17 +37,18 @@ CREATE INDEX IF NOT EXISTS credentials_user_id ON credentials(user_id);
 CREATE TABLE IF NOT EXISTS challenges (
   id           TEXT NOT NULL PRIMARY KEY,
   challenge    BLOB NOT NULL UNIQUE,
-  purpose      TEXT NOT NULL CHECK (purpose IN ('register', 'login', 'stepup')),
+  purpose      TEXT NOT NULL CHECK (purpose IN ('register', 'login', 'stepup', 'add_credential')),
   user_handle  BLOB,                           -- register only
   display_name TEXT,                           -- register only
-  user_id      TEXT REFERENCES users(id) ON DELETE CASCADE,  -- stepup only
+  user_id      TEXT REFERENCES users(id) ON DELETE CASCADE,  -- stepup, add_credential
   tx_hash      TEXT,                           -- stepup only
-  session_id   TEXT,                           -- stepup only: sessions.id that asked (no FK: rotation replaces it)
+  session_id   TEXT,                           -- stepup, add_credential: sessions.id that asked (no FK: rotation replaces it)
   expires_at   TEXT NOT NULL,
   -- Columns each purpose depends on. A NULL here would make the D14 binding or the
   -- tx_hash comparison compare against NULL, which can fail open in app code.
   CHECK (purpose <> 'register' OR (user_handle IS NOT NULL AND display_name IS NOT NULL)),
-  CHECK (purpose <> 'stepup' OR (user_id IS NOT NULL AND tx_hash IS NOT NULL AND session_id IS NOT NULL))
+  CHECK (purpose <> 'stepup' OR (user_id IS NOT NULL AND tx_hash IS NOT NULL AND session_id IS NOT NULL)),
+  CHECK (purpose <> 'add_credential' OR (user_id IS NOT NULL AND session_id IS NOT NULL))
 );
 CREATE INDEX IF NOT EXISTS challenges_expires_at ON challenges(expires_at);
 CREATE INDEX IF NOT EXISTS challenges_user_id ON challenges(user_id);
@@ -81,7 +82,7 @@ CREATE INDEX IF NOT EXISTS transfers_user_id ON transfers(user_id);
  * CREATE TABLE IF NOT EXISTS silently keeps an old table, so an outdated
  * database is refused instead, and `docker compose down -v` recreates it.
  */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export class OutdatedSchemaError extends Error {
   constructor(found: number) {

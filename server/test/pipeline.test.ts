@@ -4,7 +4,7 @@ import {
   REGISTRATION_CHECKS,
   runChecks,
   STEPUP_CHECKS,
-  TRANSFER_GATE_CHECKS,
+  OPERATION_GATE_CHECKS,
 } from '../src/webauthn/pipeline.js';
 import { CheckError, type Check, type CheckId } from '../src/webauthn/checks/types.js';
 
@@ -111,13 +111,13 @@ describe('verification pipeline', () => {
     });
   });
 
-  describe('transfer gate', () => {
+  describe('operation gate', () => {
     it('runs S3 then S2', () => {
-      expect(TRANSFER_GATE_CHECKS.map((c) => c.id)).toEqual(['S3', 'S2']);
+      expect(OPERATION_GATE_CHECKS.map((c) => c.id)).toEqual(['S3', 'S2']);
     });
 
     it('cannot be modified at runtime', () => {
-      expect(Object.isFrozen(TRANSFER_GATE_CHECKS)).toBe(true);
+      expect(Object.isFrozen(OPERATION_GATE_CHECKS)).toBe(true);
     });
   });
 

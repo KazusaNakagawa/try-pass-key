@@ -286,11 +286,58 @@ sequenceDiagram
 
 実装の補足（M6、D36〜D39）:
 
-- **取引ハッシュ**: `base64url(SHA-256(JSON.stringify({ kind: 'transfer', to, amount })))`。キーはこの順で組み立て直すので、リクエスト本文の書き方に左右されない。`kind` は、M7 のパスキー削除を同じ仕組みで承認したときに、別の種類の操作の承認として流用されないようにするため（`server/src/transfer/tx-hash.ts`）
+- **取引ハッシュ（M7 から操作ハッシュ）**: `base64url(SHA-256(JSON.stringify({ kind: 'transfer', to, amount })))`。キーはこの順で組み立て直すので、リクエスト本文の書き方に左右されない。`kind` は、別の種類の操作（M7 のパスキー追加・削除）の承認として流用されないようにするため。M7 で `operationHash`（`server/src/operations/operation-hash.ts`）に一般化した。送金のハッシュ値は M6 と同じ（5.4、D42）
 - **紐づけ方**: challenge は乱数のまま。options で取引ハッシュを challenge の行（`tx_hash`）に保存し、verify が通ったらセッションの `approved_tx_hash` に写す。challenge に取引を埋め込んでも、認証器が取引を表示しない以上、利用者が何に署名したかの保証は増えない（D37）
 - **検証**: verify は `STEPUP_CHECKS` を通す。ログインの検証から L2 を外し、S1（鍵の持ち主がセッションのユーザー）を入れたもの。`allowCredentials` を指定した認証では `userHandle` が返らないことがあり（WebAuthn L3 §5.2.2）、`userHandle` を必須にする L2 では正当な承認が拒否されうる。C5 は一時 Cookie ではなく、行の `session_id` と、応答を送ってきたセッションの ID（トークンのハッシュ）の一致で縛る。ユーザーの一致で縛ると、漏れた応答を同じユーザーの別セッション（盗まれた Cookie）で使えてしまう（D40）
 - **セッションIDの再発行**: verify が通ったら、古いセッションを消して新しいIDを発行し、そこに `stepup_at` と `approved_tx_hash` を記録する。`auth_at` と絶対期限は引き継ぐ（ステップアップで延びない）。signCount の記録とセッションの作り直しは1つのトランザクションで行い、途中で失敗したらどちらも残らない
-- **送金のゲート**: `/api/transfer` は本文を検証し、セッションの承認を読み込んでから `TRANSFER_GATE_CHECKS`（S3 → S2）を通す。S2 は読み込んだ承認と比べるので、S3 に依存しない。S3 が承認を先に消費するので、S2 で拒否される送金でも承認は使い切りになる。消費は「読んだ値と一致するときだけ消す」条件付き UPDATE で行い、同じ承認で同時に来た2つの送金は片方しか通らない（D38）。残高不足でも承認は戻さない。`/api/stepup/options` が先に残高を確かめるので、普通は起きない
+- **送金のゲート**: `/api/transfer` は本文を検証し、セッションの承認を読み込んでから `OPERATION_GATE_CHECKS`（S3 → S2。M6 時点の名前は `TRANSFER_GATE_CHECKS`）を通す。S2 は読み込んだ承認と比べるので、S3 に依存しない。S3 が承認を先に消費するので、S2 で拒否される送金でも承認は使い切りになる。消費は「読んだ値と一致するときだけ消す」条件付き UPDATE で行い、同じ承認で同時に来た2つの送金は片方しか通らない（D38）。残高不足でも承認は戻さない。`/api/stepup/options` が先に残高を確かめるので、普通は起きない
+
+### 5.4 パスキーの追加と削除（M7）
+
+ログイン中のユーザーが、パスキーの一覧を見て、2本目以降を追加し、不要なものを削除する。追加と削除は、どちらもステップアップの承認がなければ通らない（D43）。盗まれたセッションで攻撃者が自分のパスキーを追加できると、Cookie が失効した後もそのパスキーでログインし続けられる。送金よりも被害が長く続く乗っ取りになる。
+
+ステップアップで承認する対象は「操作」で、`transfer` / `add_credential` / `delete_credential` の3種類（`StepupOperation`）。承認は操作ハッシュ（種類ごとにキーの順を固定した `{ kind, ... }` の SHA-256）でセッションに記録し、送金・追加・削除の前に同じゲート `OPERATION_GATE_CHECKS`（S3 → S2）を通す（D42）。
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant B as ブラウザ
+  participant A as 認証器
+  participant S as RPサーバー
+
+  Note over B,S: 追加
+  B->>S: POST /api/stepup/options {kind: add_credential}
+  S-->>B: RequestOptions（allowCredentials = そのユーザーの鍵）
+  B->>A: get() で承認
+  B->>S: POST /api/stepup/verify → セッションに承認を記録
+  B->>S: POST /api/credentials/options（承認を消費せずに確かめる。D48）
+  S->>S: purpose add_credential の challenge。行に user_id と session_id
+  S-->>B: CreationOptions（user.id = 既存の user_handle、excludeCredentials = 既存の鍵）
+  B->>A: create()
+  A-->>B: attestation
+  B->>S: POST /api/credentials/verify
+  S->>S: REGISTRATION_CHECKS（C5 はセッションで縛る）→ ゲート（承認を消費）→ 行の user_id に保存
+
+  Note over B,S: 削除
+  B->>S: DELETE /api/credentials/:id
+  S->>S: 持ち主でなければ 404、最後の1本なら 409（ゲートより前）
+  S-->>B: 401 step_up_required
+  B->>S: ステップアップ {kind: delete_credential, credentialId}
+  B->>S: DELETE /api/credentials/:id（再送）→ ゲート → 1文で削除（最後の1本は残す）
+```
+
+設計上のポイント:
+
+- 承認はセッションに1つだけで、どの操作のステップアップでも上書きされ、どの操作のゲートでも消費される（承認なしの送金や削除を試しただけで、待っていた追加の承認は消える）
+- 追加の承認は verify で消費する。作成ダイアログのキャンセルや `excludeCredentials` による拒否の後も、承認が残っていれば options からやり直せる。ゲートは登録の検証がすべて通った後に置き、壊れた応答で承認を消費させない（D44）
+- options は、セッションに追加の承認があり、残りが1分以上あるときだけ出す（消費はしない）。なければ 401 `step_up_required` を返し、画面はステップアップしてから取り直す。WebAuthn の `timeout` は承認の残り時間から30秒引いた値にし、承認より先にブラウザの ceremony が終わるようにする。verify で承認切れと分かった時点では、認証器にはもうパスキーができているため（D48）
+- 追加の challenge は、ステップアップと同じく要求したセッションに縛る（C5）。追加した鍵は、セッションのユーザーではなく challenge の行の `user_id` に保存する。両者は C5 が通れば一致する。行を起点にすると、C5 を外したときの攻撃（漏れた challenge に攻撃者が自分の鍵で答え、自分の承認済みセッションから送ると、攻撃者の鍵が被害者に付く）をテストで再現できる（D45）
+- 追加の options は `user.id` に既存の `user_handle` を使い（追加した鍵でのログインが同じユーザーになる、L2）、`excludeCredentials` に既存の鍵を入れる
+- 削除では、持ち主の確認（404 `credential_not_found`）と最後の1本の確認（409 `last_credential`）をゲートより前に行う。他人の鍵を指定したリクエストで承認を消費させないため。この2つは認可と業務ルールで、6章の検証項目ではない（D46）。最後の1本の確認と削除は1文の DELETE にし、同時に2本消しても1本は残る
+- 鍵を削除しても、その鍵でログインしたセッションは失効しない（セッションはどの鍵でログインしたかを持たない。9章）
+- それでも、複数タブでの同時操作や通信の失敗では、認証器にだけ鍵が残りうる。作成と保存を原子的にする方法がないため（K12、D50）
+- 「直近の ceremony」では、追加の検証欄に登録の検証項目に続けてゲート（S3、S2）も並ぶ。ゲートで拒否されたときに、どこで止まったかが行で分かる
+- 一覧を読んだときと削除したときに、Signal API（`signalAllAcceptedCredentials`）で受け付ける鍵を認証器に伝える。ログインが L1（未登録の鍵）で拒否されたら `signalUnknownCredential` を呼ぶ。対応ブラウザだけで動き、認証器がどう扱うかは認証器次第（K2）
 
 ## 6. サーバー側の検証項目
 
@@ -323,7 +370,7 @@ export function runChecks(ctx: CeremonyContext, checks: readonly Check[]) { /* �
 | C2 | `challenge` がサーバー発行の未使用・期限内の値と一致 | リプレイ攻撃（過去の署名の再送） |
 | C3 | `origin` が許可 origin（`RP_ORIGIN`）と完全一致し、`crossOrigin` が true でない | フィッシングサイト経由の応答、他サイトの iframe から呼ばせた応答を受理 |
 | C4 | challenge を、他のどの検査よりも、また attestationObject のデコードよりも先に削除する（検証の成否にかかわらず使い捨て）。同時に2つのリクエストが行を見つけた場合は、削除できた方だけが続行する | 同じ challenge での二重登録・二重ログイン、壊れた応答を送って challenge を使い回すこと |
-| C5 | challenge が要求元のブラウザに発行されたもの（challenge の値で引いた行の ID が一時 Cookie `ceremony` の値と一致。ステップアップでは行の `session_id` が、応答を送ってきたセッションの ID と一致。D40） | 漏れた署名済み応答（XSS での窃取、ログへの混入など）を、攻撃者が別のブラウザから送って受理される |
+| C5 | challenge が要求元のブラウザに発行されたもの（challenge の値で引いた行の ID が一時 Cookie `ceremony` の値と一致。ステップアップとパスキー追加では行の `session_id` が、応答を送ってきたセッションの ID と一致。D40、D45） | 漏れた署名済み応答（XSS での窃取、ログへの混入など）を、攻撃者が別のブラウザから送って受理される |
 
 ### 6.2 authenticatorData
 
@@ -355,13 +402,13 @@ export function runChecks(ctx: CeremonyContext, checks: readonly Check[]) { /* �
 
 ### 6.5 ステップアップ時のみ（M6、D36）
 
-再認証（`/api/stepup/verify`）の `STEPUP_CHECKS` は、C1〜C5、A1〜A4、L1、L3、L4 にこの S1 を加えたもの（L2 は使わない。5.3 の補足）。S2・S3 は送金（`/api/transfer`）の直前に `TRANSFER_GATE_CHECKS` として S3 → S2 の順で実行する。攻撃再現は `server/test/stepup-attacks.test.ts` と `server/test/transfer-gate-attacks.test.ts`。
+再認証（`/api/stepup/verify`）の `STEPUP_CHECKS` は、C1〜C5、A1〜A4、L1、L3、L4 にこの S1 を加えたもの（L2 は使わない。5.3 の補足）。S2・S3 は、送金（`/api/transfer`）、パスキー追加（`/api/credentials/verify`）、パスキー削除（`DELETE /api/credentials/:id`）の直前に `OPERATION_GATE_CHECKS` として S3 → S2 の順で実行する（5.4、D42）。攻撃再現は `server/test/stepup-attacks.test.ts` と `server/test/operation-gate-attacks.test.ts`。パスキー追加の ceremony 自体（C5・C2・R2）は `server/test/add-credential-attacks.test.ts`。
 
 | # | 検証 | 外した場合に通る攻撃 |
 |---|---|---|
 | S1 | credential の持ち主がセッションのユーザーと一致し、`userHandle` が返っていればそれもセッションのユーザーを指す（WebAuthn L3 §7.2 の手順6。ユーザーが ceremony の前に特定されている場合） | セッションを盗んだ攻撃者が、自分のアカウントに登録した自分のパスキーで承認し、被害者として送金する（`allowCredentials` はブラウザへの依頼にすぎない） |
-| S2 | 送金内容の取引ハッシュが、セッションの承認済みハッシュと一致する。承認がなければ拒否する | 承認後に金額や送金先を書き換えた送金が通る |
-| S3 | 承認があり、5分以内で、まだ使われていない（この送金で消費できた） | 5分を過ぎた承認での送金、1回の承認での2回目の送金。ステップアップなしの送金も S3 が拒否するが、S3 を外しても S2 が承認なしとして拒否する（多層防御） |
+| S2 | 操作（送金内容、追加、削除する鍵）の操作ハッシュが、セッションの承認済みハッシュと一致する。承認がなければ拒否する | 承認後に金額や送金先を書き換えた送金が通る。送金の承認で鍵を削除する、鍵 X の削除の承認で鍵 Y を削除する（M7） |
+| S3 | 承認があり、5分以内で、まだ使われていない（このリクエストで消費できた） | 5分を過ぎた承認での送金、1回の承認での2回目の送金、1回の追加の承認での2本目の追加（M7）。ステップアップなしの送金・追加も S3 が拒否するが、S3 を外しても S2 が承認なしとして拒否する（多層防御） |
 
 S2・S3 で拒否したときは `401 step_up_required` を返し、どちらで落ちたかを `check` に入れる。クライアントはステップアップをやり直せばよい。S1 は他の検証項目と同じく 400（`credential_not_owned`）。
 
@@ -497,6 +544,7 @@ challenge は登録・認証前のためユーザーと紐づかないことが�
 | サーバーDB漏洩 | 公開鍵しか持たない | セッションIDが漏れると有効期間中は悪用される |
 | 盗まれたセッションでの送金 | ステップアップ必須（S3）、承認はセッションのユーザー自身の鍵だけ（S1） | 承認から送金までの間（最長5分）にセッションを盗まれ、承認した内容のまま送金される場合 |
 | 承認後の取引改ざん | 承認を取引ハッシュに紐づけ（S2） | なし |
+| 盗まれたセッションでのパスキー追加・削除（M7） | ステップアップ必須（S3）、承認を操作の種類と対象に紐づけ（S2）、追加の challenge をセッションに縛る（C5） | 攻撃者が先に鍵を追加できてしまった場合、利用者がその鍵を削除しても、攻撃者の既存セッションは残る（セッションはどの鍵でログインしたかを持たない）。本番では鍵の削除時にそのユーザーの全セッションを失効させるなどが要る |
 | 画面改ざんによる誤承認（Man-in-the-Browser） | 対象外 | 認証器は取引内容を表示しないため残る。本番では別経路での通知・確認が必要 |
 | 端末の乗っ取り | UV必須（A3） | ロック解除済み端末を操作される場合は防げない |
 | 同期元（iCloud、Google、1Password 等）の乗っ取り、またはロック解除中の端末へのマルウェア | BE/BS と AAGUID を記録し可視化 | 防げない。保管庫が開かれれば秘密鍵も使われる。高リスク用途では端末固定鍵（BE=0）の要求を検討 |
@@ -650,7 +698,9 @@ try-pass-key/
 | # | 懸念 | 影響 | 対策 |
 |---|---|---|---|
 | K1 | 実機で試すと、`localhost` 用のパスキーが iCloud キーチェーンや Google パスワードマネージャーに残る | 実害はない（`localhost` 以外では使われず、既存のパスキーにも触れない）。一覧が散らかる程度 | 普段の開発は仮想認証器（DevTools / E2E）で行い、実機確認後は不要なパスキーを削除する。表示名にはテスト用の名前を使う。詳細は [02-knowledge-passkey.md](./02-knowledge-passkey.md) の1章 |
-| K2 | `docker compose down -v` でDBを消しても、認証器側にはパスキーが残る | 使えないパスキーが一覧に出続け、選ぶと `unknown_credential` になる | 学習項目として扱う。Signal API（`PublicKeyCredential.signalUnknownCredential` など）で認証器に削除を伝える実装を M7 の任意課題にする |
+| K2 | `docker compose down -v` でDBを消しても、認証器側にはパスキーが残る | 使えないパスキーが一覧に出続け、選ぶと `unknown_credential` になる | 学習項目として扱う。M7 で Signal API を実装した: 一覧の取得と削除の後に `signalAllAcceptedCredentials`、L1 で拒否されたログインの後に `signalUnknownCredential`。実機では、Chrome は両方の関数を持つが、1Password の項目は削除後も消えなかった（docs/02 §1.1） |
+| K11 | `excludeCredentials` は認証器への依頼で、守るかは認証器次第（M7） | 1Password は同じユーザーへの2本目を拒否せず「既存をアップデート」を出し、同じ製品の鍵が重複した。既存の鍵が置き換わり、サーバーに署名できない鍵が残った可能性もある | サーバーでは強制しない（D49）。重複した鍵は一覧から削除できる。認証器ごとの挙動は docs/02 §1.2 |
+| K12 | 認証器での作成とサーバーへの保存は原子的にできない（M7） | 作成の後に verify が通らないと、認証器にだけ鍵が残る。D48 で防げるのは、承認がないのに作成へ進む場合だけ。次の場合は残る: 2つのタブが1つの承認で同時に作成する（先の verify が承認を消費する）、作成中に別のタブでステップアップしてセッション ID が変わる（C5）、ブラウザが `timeout` を丸めて承認より長く待つ（推測。仕様上 timeout はヒント）、verify の通信が失敗する | サーバー側では完全には防げないので、限界として扱う（D50）。残った鍵は Signal API で認証器に伝えるが、1Password には効かなかった（K2）。利用者が手で消す |
 | K3 | RP ID を変えると既存のパスキーがすべて使えなくなる | トンネル利用時に毎回作り直しになる | `.env` で切り替え、切り替え時はDBも初期化する手順を `CLAUDE.md` に書く |
 | K4 | AI がテストを通すために検証を緩める | 6章の検証が抜けたまま「動く」状態になる。学習目的が崩れる | 6章の各項目に対応する攻撃再現テストを先に書き（TDD）、`CLAUDE.md` に「攻撃再現テストを消す・skip する変更は禁止」と明記する |
 | K5 | 可視化用の `inspection` が本番の応答に残る | 本番に持ち込むと情報漏洩になる | `INSPECTION=on` のときだけ組み立て、既定は off、`NODE_ENV=production` との組み合わせは起動時に拒否する。付かないことをテスト（`server/src/routes/inspection.test.ts`）で確かめる。PoCを本番に流用しない前提も `CLAUDE.md` に書く |

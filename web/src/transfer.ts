@@ -1,14 +1,6 @@
-import { startAuthentication } from '@simplewebauthn/browser';
-import {
-  StepupOptionsResponse,
-  StepupVerifyResponse,
-  TransferResponse,
-  type TransferRequest,
-} from '@app/shared';
-import { ApiRequestError, postJson } from './api.js';
-
-const isStepUpRequired = (err: unknown) =>
-  err instanceof ApiRequestError && err.body?.error === 'step_up_required';
+import { TransferResponse, type StepupVerifyResponse, type TransferRequest } from '@app/shared';
+import { postJson } from './api.js';
+import { isStepUpRequired, stepUpFor } from './stepup.js';
 
 /**
  * Transfer with step-up (docs/01 §5.3): try the transfer; if the server answers
@@ -28,8 +20,6 @@ export async function transferWithStepUp(
     if (!isStepUpRequired(err)) throw err;
   }
   hooks.onStepUp();
-  const options = await postJson('/api/stepup/options', tx, StepupOptionsResponse);
-  const credential = await startAuthentication({ optionsJSON: options });
-  hooks.onApproved(await postJson('/api/stepup/verify', credential, StepupVerifyResponse));
+  hooks.onApproved(await stepUpFor({ kind: 'transfer', ...tx }));
   return postJson('/api/transfer', tx, TransferResponse);
 }

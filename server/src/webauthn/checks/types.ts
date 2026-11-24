@@ -35,7 +35,7 @@ export class CheckError extends Error {
   }
 }
 
-export type ChallengePurpose = 'register' | 'login' | 'stepup';
+export type ChallengePurpose = 'register' | 'login' | 'stepup' | 'add_credential';
 
 export interface ChallengeRow {
   id: string;
@@ -45,7 +45,7 @@ export interface ChallengeRow {
   displayName: string | null;
   userId: string | null;
   txHash: string | null;
-  /** Step-up only: the session that asked for the challenge. */
+  /** Step-up and add_credential: the session that asked for the challenge. */
   sessionId: string | null;
   expiresAt: string;
 }
@@ -65,11 +65,15 @@ export interface CeremonyContext {
   challengeRow: ChallengeRow | undefined;
   /** Value of the "ceremony" cookie sent with the request, if any. */
   ceremonyId: string | undefined;
-  /** Step-up only: the user of the session the response was submitted with (S1). */
+  /**
+   * Ceremonies inside a logged-in session (step-up, adding a passkey): the user
+   * of the session the response was submitted with (S1 for step-up).
+   */
   sessionUserId: string | undefined;
   /**
-   * Step-up only: the session the response was submitted with (its ID, the token
-   * hash). C5 binds a step-up challenge to it instead of the ceremony cookie (D40).
+   * Ceremonies inside a logged-in session: the session the response was submitted
+   * with (its ID, the token hash). C5 binds their challenge to it instead of the
+   * ceremony cookie (D40).
    */
   sessionId: string | undefined;
   /** Deletes the challenge row. Returns false if it was already gone. */
@@ -120,18 +124,21 @@ export interface StepupContext extends AuthenticationContext {
 }
 
 /** A step-up approval recorded on the session. */
-export interface TransferApproval {
+export interface StepupApproval {
   stepupAt: string;
   approvedTxHash: string;
 }
 
-/** What the transfer gate (S3, S2) checks before money moves. */
-export interface TransferContext {
-  /** Hash of the transfer being requested (transferTxHash). */
+/**
+ * What the operation gate (S3, S2) checks before a step-up-protected operation
+ * runs: a transfer, adding a passkey or deleting one.
+ */
+export interface OperationGateContext {
+  /** Hash of the operation being requested (operationHash). */
   txHash: string;
   now: Date;
   /** The session's approval, read when the context was built. */
-  approval: TransferApproval | undefined;
+  approval: StepupApproval | undefined;
   /**
    * Takes that approval off the session, only if it is still there unchanged.
    * False when another request used it first.

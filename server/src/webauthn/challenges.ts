@@ -18,7 +18,8 @@ interface DbChallengeRow {
 export type ChallengeInput =
   | { purpose: 'register'; userHandle: Buffer; displayName: string }
   | { purpose: 'login' }
-  | { purpose: 'stepup'; userId: string; sessionId: string; txHash: string };
+  | { purpose: 'stepup'; userId: string; sessionId: string; txHash: string }
+  | { purpose: 'add_credential'; userId: string; sessionId: string };
 
 export function issueChallenge(
   db: DatabaseSync,
@@ -38,9 +39,9 @@ export function issueChallenge(
     input.purpose,
     input.purpose === 'register' ? input.userHandle : null,
     input.purpose === 'register' ? input.displayName : null,
-    input.purpose === 'stepup' ? input.userId : null,
+    'userId' in input ? input.userId : null,
     input.purpose === 'stepup' ? input.txHash : null,
-    input.purpose === 'stepup' ? input.sessionId : null,
+    'sessionId' in input ? input.sessionId : null,
     expiresAt,
   );
   return { id, challenge };
