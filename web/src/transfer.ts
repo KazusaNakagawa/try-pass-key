@@ -28,7 +28,11 @@ export async function transferWithStepUp(
     if (!isStepUpRequired(err)) throw err;
   }
   hooks.onStepUp();
-  const options = await postJson('/api/stepup/options', tx, StepupOptionsResponse);
+  const options = await postJson(
+    '/api/stepup/options',
+    { kind: 'transfer', ...tx },
+    StepupOptionsResponse,
+  );
   const credential = await startAuthentication({ optionsJSON: options });
   hooks.onApproved(await postJson('/api/stepup/verify', credential, StepupVerifyResponse));
   return postJson('/api/transfer', tx, TransferResponse);

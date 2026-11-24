@@ -120,18 +120,21 @@ export interface StepupContext extends AuthenticationContext {
 }
 
 /** A step-up approval recorded on the session. */
-export interface TransferApproval {
+export interface StepupApproval {
   stepupAt: string;
   approvedTxHash: string;
 }
 
-/** What the transfer gate (S3, S2) checks before money moves. */
-export interface TransferContext {
-  /** Hash of the transfer being requested (transferTxHash). */
+/**
+ * What the operation gate (S3, S2) checks before a step-up-protected operation
+ * runs: a transfer, adding a passkey or deleting one.
+ */
+export interface OperationGateContext {
+  /** Hash of the operation being requested (operationHash). */
   txHash: string;
   now: Date;
   /** The session's approval, read when the context was built. */
-  approval: TransferApproval | undefined;
+  approval: StepupApproval | undefined;
   /**
    * Takes that approval off the session, only if it is still there unchanged.
    * False when another request used it first.

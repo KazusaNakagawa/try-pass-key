@@ -2,7 +2,7 @@ import {
   RegisterOptionsResponse,
   RegisterVerifyResponse,
   StepupOptionsResponse,
-  type TransferRequest,
+  type StepupOperation,
 } from '@app/shared';
 import { TEST_CONFIG } from './registration-harness.js';
 import { SoftAuthenticator, type AssertionOverrides } from './soft-authenticator.js';
@@ -40,15 +40,18 @@ export async function registerUser(baseUrl: string, displayName = 'test-user-1')
   };
 }
 
-/** Runs /api/stepup/options and /api/stepup/verify in `user`'s browser, signed by `signer`. */
+/**
+ * Runs /api/stepup/options and /api/stepup/verify for `op` in `user`'s browser,
+ * signed by `signer`.
+ */
 export async function stepUp(
   user: ApiUser,
-  tx: TransferRequest,
+  op: StepupOperation,
   overrides: AssertionOverrides = {},
   signer: ApiUser = user,
 ): Promise<Response> {
   const options = StepupOptionsResponse.parse(
-    await (await user.browser.request('POST', '/api/stepup/options', tx)).json(),
+    await (await user.browser.request('POST', '/api/stepup/options', op)).json(),
   );
   return user.browser.request(
     'POST',

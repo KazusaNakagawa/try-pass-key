@@ -25,7 +25,7 @@ import type {
   CheckId,
   RegistrationContext,
   StepupContext,
-  TransferContext,
+  OperationGateContext,
 } from './checks/types.js';
 
 /**
@@ -97,14 +97,18 @@ export const STEPUP_CHECKS: readonly Check<StepupContext>[] = Object.freeze([
 ]);
 
 /**
- * Checked before a transfer moves money. Both read the approval loaded with the
- * context; S3 consumes it first, so a transfer that S2 rejects still uses it up.
+ * Checked before a step-up-protected operation runs (a transfer, adding a
+ * passkey, deleting one). Both read the approval loaded with the context; S3
+ * consumes it first, so a request that S2 rejects still uses it up.
  */
-export const TRANSFER_GATE_CHECKS: readonly Check<TransferContext>[] = Object.freeze([S3, S2]);
+export const OPERATION_GATE_CHECKS: readonly Check<OperationGateContext>[] = Object.freeze([
+  S3,
+  S2,
+]);
 
-/** Runs the frozen transfer gate. The transfer route calls this, never runChecks with a list. */
-export function runTransferGate(ctx: TransferContext): void {
-  runChecks(ctx, TRANSFER_GATE_CHECKS);
+/** Runs the frozen operation gate. Routes call this, never runChecks with a list. */
+export function runOperationGate(ctx: OperationGateContext): void {
+  runChecks(ctx, OPERATION_GATE_CHECKS);
 }
 
 /**
