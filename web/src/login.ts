@@ -4,7 +4,8 @@ import {
   WebAuthnAbortService,
 } from '@simplewebauthn/browser';
 import { LoginOptionsResponse, LoginVerifyResponse } from '@app/shared';
-import { postJson } from './api.js';
+import { ApiRequestError, postJson } from './api.js';
+import { signalUnknown } from './signal.js';
 
 /**
  * Login ceremony (docs/01 §5.2). allowCredentials is empty, so the authenticator
@@ -24,7 +25,16 @@ export async function loginWithPasskey(useBrowserAutofill = false): Promise<Logi
     throw new DOMException('Conditional UI was cancelled', 'AbortError');
   }
   const credential = await startAuthentication({ optionsJSON: options, useBrowserAutofill });
-  return postJson('/api/login/verify', credential, LoginVerifyResponse);
+  try {
+    return await postJson('/api/login/verify', credential, LoginVerifyResponse);
+  } catch (err) {
+    // A passkey this RP no longer knows (deleted, or from a deleted database):
+    // let the authenticator remove or hide it (docs/01 K2).
+    if (err instanceof ApiRequestError && err.body?.check === 'L1') {
+      signalUnknown(options.rpId, credential.id);
+    }
+    throw err;
+  }
 }
 
 export async function supportsConditionalUI(): Promise<boolean> {

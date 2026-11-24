@@ -1,5 +1,14 @@
-import { HealthResponse, MeResponse, TransfersResponse } from '@app/shared';
+import {
+  HealthResponse,
+  MeResponse,
+  TransfersResponse,
+  type CredentialSummary,
+  type CredentialsResponse,
+  type StepupVerifyResponse,
+} from '@app/shared';
+import { aaguidName } from './aaguid-names.js';
 import { ApiRequestError, getJson } from './api.js';
+import { addPasskey, deletePasskey, loadCredentials } from './credentials.js';
 import { showInspection } from './inspector.js';
 import { cancelConditionalUI, loginWithPasskey, supportsConditionalUI } from './login.js';
 import { registerPasskey } from './register.js';
@@ -31,6 +40,10 @@ const ui = {
   transferAmount: $('#transfer-amount', HTMLInputElement),
   transferResult: $('#transfer-result', HTMLPreElement),
   transferHistory: $('#transfer-history', HTMLUListElement),
+  passkeySection: $('#passkey-section', HTMLElement),
+  passkeyList: $('#passkey-list', HTMLUListElement),
+  passkeyAdd: $('#passkey-add', HTMLButtonElement),
+  passkeyResult: $('#passkey-result', HTMLPreElement),
 };
 
 const yen = (n: number) => n.toLocaleString('ja-JP');
@@ -48,7 +61,11 @@ function showMe(me: MeResponse | undefined): void {
   ui.logout.hidden = !me;
   ui.loginSection.hidden = Boolean(me);
   ui.transferSection.hidden = !me;
-  if (me) void refreshTransfers();
+  ui.passkeySection.hidden = !me;
+  if (me) {
+    void refreshTransfers();
+    void refreshPasskeys();
+  }
 }
 
 function showTransfers({ balance, transfers }: TransfersResponse): void {
@@ -68,6 +85,109 @@ async function refreshTransfers(): Promise<void> {
   } catch (err) {
     ui.transferResult.textContent = `残高を取得できませんでした\n${message(err)}`;
   }
+}
+
+const dateTime = (iso: string | null) => (iso ? new Date(iso).toLocaleString('ja-JP') : '—');
+
+/** One step-up or passkey operation at a time, like the transfer form. */
+let passkeyBusy = false;
+
+function setPasskeyBusy(busy: boolean): void {
+  passkeyBusy = busy;
+  ui.passkeyAdd.disabled = busy;
+  for (const button of ui.passkeyList.querySelectorAll('button')) {
+    button.disabled = busy || ui.passkeyList.children.length <= 1;
+  }
+}
+
+function passkeyRow(credential: CredentialSummary, isLast: boolean): HTMLLIElement {
+  const li = document.createElement('li');
+  li.dataset.credentialId = credential.id;
+  const name = aaguidName(credential.aaguid) ?? `AAGUID ${credential.aaguid}`;
+  const text = document.createElement('span');
+  text.textContent =
+    `${name}  作成 ${dateTime(credential.createdAt)}  最終使用 ${dateTime(credential.lastUsedAt)}\n` +
+    `BE=${Number(credential.backupEligible)} BS=${Number(credential.backupState)}  ` +
+    `${credential.transports.join(', ') || '(transports なし)'}  ID ${credential.id.slice(0, 12)}…`;
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'passkey-delete';
+  remove.textContent = '削除';
+  // The server refuses too (409); this only saves a pointless step-up.
+  remove.disabled = isLast || passkeyBusy;
+  remove.addEventListener('click', () => {
+    onDeletePasskey(credential.id);
+  });
+  li.append(text, remove);
+  return li;
+}
+
+function showPasskeys(list: CredentialsResponse): void {
+  const isLast = list.credentials.length <= 1;
+  ui.passkeyList.replaceChildren(...list.credentials.map((c) => passkeyRow(c, isLast)));
+}
+
+async function refreshPasskeys(): Promise<void> {
+  try {
+    showPasskeys(await loadCredentials());
+  } catch (err) {
+    ui.passkeyResult.textContent = `パスキーの一覧を取得できませんでした\n${message(err)}`;
+  }
+}
+
+const passkeyStepUpHooks = {
+  onStepUp: () => {
+    ui.passkeyResult.textContent = 'ステップアップが必要です。認証器の操作を待っています...';
+  },
+  onApproved: (stepup: StepupVerifyResponse) => {
+    showInspection(ui.inspector, stepup.inspection);
+  },
+};
+
+ui.passkeyAdd.addEventListener('click', () => {
+  setPasskeyBusy(true);
+  ui.passkeyResult.textContent = 'パスキーを追加しています...';
+  addPasskey({
+    ...passkeyStepUpHooks,
+    onCreating: () => {
+      ui.passkeyResult.textContent = '新しいパスキーの作成を待っています...';
+    },
+  })
+    .then((result) => {
+      ui.passkeyResult.textContent = `パスキーを追加しました\n${JSON.stringify(result.credential, null, 2)}`;
+      showInspection(ui.inspector, result.inspection);
+    })
+    .catch((err: unknown) => {
+      ui.passkeyResult.textContent =
+        `パスキーを作成できませんでした\n${message(err)}\n` +
+        '承認から5分以内なら、もう一度「パスキーを追加」を押すとステップアップなしでやり直せます。' +
+        'このユーザーのパスキーがすでにある認証器は選べません。';
+      const inspection = inspectionOf(err);
+      if (inspection) showInspection(ui.inspector, inspection);
+    })
+    .finally(async () => {
+      await refreshMe();
+      setPasskeyBusy(false);
+    });
+});
+
+function onDeletePasskey(credentialId: string): void {
+  setPasskeyBusy(true);
+  ui.passkeyResult.textContent = 'パスキーを削除しています...';
+  deletePasskey(credentialId, passkeyStepUpHooks)
+    .then((list) => {
+      ui.passkeyResult.textContent = 'パスキーを削除しました';
+      showPasskeys(list);
+    })
+    .catch((err: unknown) => {
+      ui.passkeyResult.textContent = `パスキーを削除できませんでした\n${message(err)}`;
+      const inspection = inspectionOf(err);
+      if (inspection) showInspection(ui.inspector, inspection);
+    })
+    .finally(async () => {
+      await refreshMe();
+      setPasskeyBusy(false);
+    });
 }
 
 async function refreshMe(): Promise<MeResponse | undefined> {
@@ -179,6 +299,7 @@ ui.logout.addEventListener('click', () => {
   void fetch('/api/logout', { method: 'POST' }).then(async () => {
     ui.loginResult.textContent = '';
     ui.transferResult.textContent = '';
+    ui.passkeyResult.textContent = '';
     conditionalFailures = 0;
     await refreshMe();
     void startConditionalUI();

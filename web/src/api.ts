@@ -43,3 +43,13 @@ export async function postJson<T extends z.ZodType>(
   if (!res.ok) throw await requestError(res);
   return schema.parse(await res.json());
 }
+
+/** DELETE on the same-origin API and parse the response with a shared schema. */
+export async function deleteJson<T extends z.ZodType>(
+  path: string,
+  schema: T,
+): Promise<z.infer<T>> {
+  const res = await fetch(path, { method: 'DELETE' });
+  if (!res.ok) throw await requestError(res);
+  return schema.parse(await res.json());
+}
