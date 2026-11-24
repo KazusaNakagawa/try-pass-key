@@ -121,13 +121,28 @@ await (await fetch('/api/credentials/<id>', { method: 'DELETE' })).json()
 
 #### 実機での結果（2026-11-24、Chrome + 1Password）
 
-- Apple Passwords（iCloud キーチェーン）での2本目の追加、2本の削除、最後の1本の削除ボタンが押せないことを確かめた
+- Apple Passwords（iCloud キーチェーン）での2本目の追加、2本の削除、最後の1本の削除ボタンが押せないことを確かめた。Apple Passwords の鍵は BE=1・BS=1、transports は `hybrid`・`internal`（一覧と `credentials` の値。1Password の鍵も BE=1・BS=1）
 - 1Password を選ぶと、`excludeCredentials` に当たっても拒否されず、「既存をアップデート」が出た。選んでも新しい鍵として追加された（docs/02 §1.2、K11）。重複した鍵は「削除」で消せる
 - 1Password の項目の「最終編集」時刻と、一覧の「作成」時刻を並べると、どの項目がどの鍵かを推測できる
 
 #### Signal API の効き方を見る
 
 削除した後に、パスワードマネージャーの `localhost` のパスキー一覧を見る。消した鍵が消えている、または隠れているかを確かめ、結果を docs/02 に書く。Chrome 132 以降が `signalAllAcceptedCredentials` に対応している（推測。Console で `typeof PublicKeyCredential.signalAllAcceptedCredentials` が `'function'` なら呼ばれる）。`docker compose down -v` の後に残った古いパスキーでログインを試すと、L1 で拒否されたときに `signalUnknownCredential` が呼ばれる。
+
+### Safari で確かめる（未実施）
+
+docs/01 §12 の「Chrome と Safari の両方で、登録とユーザー名なしログインが成功する」のうち、Safari はまだ確かめていない（docs/04 §2）。Chrome との違いを K7 に記録する。
+
+準備: Safari の「設定 → 詳細 → Web デベロッパ用の機能を表示」をオンにすると、メニューに「開発」が出て Web インスペクタが使える。開発スタックは1章のとおり `docker compose up -d --wait` で起動し、http://localhost:5173 を開く（K9 で `.env` の `WEB_PORT` を変えている場合はそのポート）。
+
+1. **登録**: 表示名を `test-safari-1` にして「パスキーを作成」を押す。どの保存先が提案されたか（iCloud キーチェーンか 1Password か）と、Touch ID が出たかを控える。「直近の ceremony」が `登録（受理）` で ✗ がないことを確かめる
+2. **ログイン（ボタン）**: ログアウトし、「パスキーでログイン」で `test-safari-1` に入れることを確かめる
+3. **ログイン（オートフィル）**: ログアウトし、ユーザー名の入力欄をクリックする。パスキーの候補が出るか、選ぶとログインできるかを確かめる。Chrome との違いが一番出やすいところ
+4. **送金（ステップアップ）**: 送金先 `test-account-1`、金額 `1000` で送金し、残高が 99,000 になることを確かめる
+5. **（任意）パスキーの追加**: 「パスキーを追加」で、ステップアップの後に別の保存先を選べるか試す
+6. **控えること**: 各手順の成否と画面の違い、登録結果の `aaguid`・`transports`・`backupEligible`・`backupState`、Web インスペクタのコンソールのエラー
+
+結果: （未実施。実施したらここに書き、docs/01 §12 のチェックと K7、docs/04 §2 を更新する）
 
 ## 3. DB の中身を見る
 
