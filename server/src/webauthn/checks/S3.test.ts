@@ -33,6 +33,18 @@ describe('S3 approval exists, is fresh and unused', () => {
     }, 'S3');
   });
 
+  it('rejects an approval whose time cannot be read', () => {
+    expectRejectedBy(() => {
+      S3.run(context({ stepupAt: 'not-a-date', approvedTxHash: 'tx' }));
+    }, 'S3');
+  });
+
+  it('rejects an approval dated in the future', () => {
+    expectRejectedBy(() => {
+      S3.run(context({ stepupAt: ago(-60_000), approvedTxHash: 'tx' }));
+    }, 'S3');
+  });
+
   it('consumes the approval only once per run', () => {
     let calls = 0;
     const ctx: TransferContext = {

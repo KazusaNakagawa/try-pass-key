@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ApiError, TransferResponse, TransfersResponse } from '@app/shared';
 import { registerUser, stepUp } from '../../test/api-helpers.js';
 import { Browser, startTestServer } from '../../test/test-server.js';
+import { createSession } from '../session/sessions.js';
 
 let server: Awaited<ReturnType<typeof startTestServer>>;
 beforeAll(async () => {
@@ -63,6 +64,21 @@ describe('POST /api/transfer', () => {
     await stepUp(user, TX);
     expect((await user.browser.request('POST', '/api/transfer', TX)).status).toBe(200);
     await expectStepUpRequired(await user.browser.request('POST', '/api/transfer', TX), 'S3');
+  });
+
+  it("does not let the same user's other session use the approval", async () => {
+    const user = await registerUser(server.baseUrl);
+    // A second browser of the same user (another device, or a stolen cookie).
+    const other = new Browser(server.baseUrl);
+    const { token } = createSession(
+      server.db,
+      { id: user.userId, displayName: 'test-user-1' },
+      new Date(),
+    );
+    other.cookies.set('session', token);
+    await stepUp(user, TX);
+    await expectStepUpRequired(await other.request('POST', '/api/transfer', TX), 'S3');
+    expect((await user.browser.request('POST', '/api/transfer', TX)).status).toBe(200);
   });
 
   it('does not let another browser use the approval', async () => {

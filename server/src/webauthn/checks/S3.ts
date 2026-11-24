@@ -17,8 +17,10 @@ export const S3: Check<TransferContext> = {
     if (!ctx.approval) {
       throw new CheckError('S3', 'no step-up approval (never approved, or already used)');
     }
-    if (new Date(ctx.approval.stepupAt).getTime() + STEPUP_TTL_MS <= ctx.now.getTime()) {
-      throw new CheckError('S3', 'step-up approval has expired');
+    // Written so that an unreadable time (NaN) fails every comparison and is rejected.
+    const age = ctx.now.getTime() - Date.parse(ctx.approval.stepupAt);
+    if (!(age >= 0 && age < STEPUP_TTL_MS)) {
+      throw new CheckError('S3', 'step-up approval has expired or has no valid time');
     }
   },
 };
