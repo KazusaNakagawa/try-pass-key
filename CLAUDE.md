@@ -13,6 +13,7 @@ Documents under `docs/` are written in Japanese. Respond to the user in Japanese
 | `docs/01-architecture-proposal-poc.md` | Architecture proposal. Architecture content only |
 | `docs/02-knowledge-passkey.md` | Research notes. Anything that is not architecture goes here |
 | `docs/03-hands-on-verification.md` | How a person verifies things by hand: real devices, DB snapshot, session/cookie checks. Add steps here when a new manual check is found |
+| `docs/04-retrospective.md` | Retrospective (M8): lessons, acceptance-criteria status, remaining-risk analysis, proposals for what comes next. Update §2 when a pending check (Safari) is done |
 | `docs/decisions.md` | Decision log. Add a row whenever a design decision is made |
 | `docs/worklog/YYYY-MM-DD.md` | Daily work log (done / insights / issues / next) |
 
