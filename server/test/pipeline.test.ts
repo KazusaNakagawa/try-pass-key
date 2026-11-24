@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { AUTHENTICATION_CHECKS, REGISTRATION_CHECKS } from '../src/webauthn/pipeline.js';
+import { AUTHENTICATION_CHECKS, REGISTRATION_CHECKS, runChecks } from '../src/webauthn/pipeline.js';
+import { CheckError, type Check, type CheckId } from '../src/webauthn/checks/types.js';
 
 /**
  * Guards docs/01 §6 against silent removal. If a check is dropped from the
@@ -68,6 +69,31 @@ describe('verification pipeline', () => {
 
     it('consumes the challenge (C4) before any other check', () => {
       expect(AUTHENTICATION_CHECKS[0]?.id).toBe('C4');
+    });
+  });
+
+  describe('runChecks', () => {
+    it('reports pass for each check and fail for the one that throws, then rethrows', () => {
+      const failure = new CheckError('C3', 'origin mismatch');
+      const checks: Check<null>[] = [
+        { id: 'C4', title: 'first', run: () => undefined },
+        {
+          id: 'C3',
+          title: 'second',
+          run: () => {
+            throw failure;
+          },
+        },
+        { id: 'A1', title: 'third', run: () => undefined },
+      ];
+      const calls: [CheckId, string][] = [];
+      expect(() => {
+        runChecks(null, checks, (id, result) => calls.push([id, result]));
+      }).toThrow(failure);
+      expect(calls).toEqual([
+        ['C4', 'pass'],
+        ['C3', 'fail'],
+      ]);
     });
   });
 });
