@@ -64,7 +64,8 @@ async function shot(page: Page, sel: string, name: string) {
   // The response pane is sticky and scrolls on its own, which would clip a tall
   // element. Let the page lay it out in full for the element screenshots.
   await page.addStyleTag({
-    content: '.col-right { position: static !important; max-height: none !important; overflow: visible !important; }',
+    content:
+      '.col-right { position: static !important; max-height: none !important; overflow: visible !important; }',
   });
   await page.locator(sel).screenshot({ path: `${OUT}/shots/${name}.png` });
 }
