@@ -37,7 +37,7 @@ function figure(who: Who, x: number, pose: Pose, flip = false): string {
   const extras = new Map<Who, string>([
     [
       'keyko',
-      '<text x="-12" y="-54" font-size="12" class="swing">🔑</text><rect x="-5" y="-26" width="10" height="9" rx="1" class="safe" />',
+      `<g transform="scale(${sx} 1)"><text x="-12" y="-54" font-size="12" class="swing">🔑</text></g><rect x="-5" y="-26" width="10" height="9" rx="1" class="safe" />`,
     ],
     ['sabazo', '<rect x="9" y="-26" width="10" height="13" class="note" />'],
     ['nisera', '<path d="M-15 -52 h30" class="mask" />'],
@@ -148,7 +148,7 @@ const episodes: Episode[] = [
     panels: [
       {
         state: 'transfer:submit',
-        caption: 'ぱすた「test-account-1 に送るよ」',
+        caption: 'ぱすた「test-user-2 に 100 送るよ」',
         scene:
           figure('pasta', 50, 'run') +
           figure('sabazo', 150, 'idle', true) +
@@ -229,7 +229,7 @@ const episodes: Episode[] = [
 function panelHtml(panel: Panel, index: number): string {
   return `<li class="panel pending" data-state="${panel.state}">
     <span class="panel-no">${index + 1}</span>
-    <svg viewBox="0 0 200 130" role="img" aria-label="${panel.caption}"><line x1="0" x2="200" y1="${GROUND}" y2="${GROUND}" class="ground" />${panel.scene}</svg>
+    <svg viewBox="0 0 200 130" aria-hidden="true"><line x1="0" x2="200" y1="${GROUND}" y2="${GROUND}" class="ground" />${panel.scene}</svg>
     <p class="bubble">${panel.caption}</p>
     <span class="fail-mark" aria-hidden="true">💦</span>
   </li>`;
@@ -248,8 +248,9 @@ function panels(): HTMLElement[] {
   return strip ? [...strip.querySelectorAll<HTMLElement>('.panel')] : [];
 }
 
-function showEpisode(ep: number): void {
-  if (!strip || ep === current) return;
+/** Rebuilds the strip; `force` redraws even when this episode is already shown (clears done/failed). */
+function showEpisode(ep: number, force = false): void {
+  if (!strip || (ep === current && !force)) return;
   current = ep;
   strip.innerHTML = (episodes.at(ep)?.panels ?? []).map(panelHtml).join('');
   for (const [i, tab] of [...(tabs?.children ?? [])].entries()) {
@@ -266,11 +267,13 @@ function setStage(stage: PanelState): void {
   const idx = episode.panels.findIndex((p) => p.state === stage);
   for (const [i, el] of panels().entries()) {
     el.classList.remove('active', 'done', 'pending', 'failed');
+    el.removeAttribute('aria-current');
     if (i < idx) el.classList.add('done');
     else if (i > idx) el.classList.add('pending');
     else {
       el.getBoundingClientRect(); // force a reflow to restart the CSS animations
       el.classList.add('active');
+      el.setAttribute('aria-current', 'step');
     }
   }
 }
@@ -291,6 +294,7 @@ function stopPlayback(): void {
 /** Story-only replay: steps through the panels without touching any ceremony. */
 function play(ep: number): void {
   stopPlayback();
+  showEpisode(ep, true);
   const states = (episodes.at(ep)?.panels ?? []).map((p) => p.state);
   const step = (i: number): void => {
     const state = states.at(i);
@@ -311,7 +315,6 @@ if (root && tabs && strip) {
     const button = event.target instanceof Element ? event.target.closest('button') : null;
     // Leave the panel alone while a real ceremony is running.
     if (button && !live) {
-      current = -1;
       play(Number(button.dataset.ep));
     }
   });

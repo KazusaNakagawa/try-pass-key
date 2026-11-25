@@ -36,6 +36,8 @@ async function register(page: Page, displayName: string): Promise<void> {
   await expect(inspector).toContainText('C4 ✓');
   await expect(inspector).toContainText('UV=1');
   await expect(inspector).not.toContainText('✗');
+  // The manga followed registration to its last panel (docs/05).
+  await expect(page.locator('#manga .panel.active')).toHaveAttribute('data-state', 'register:done');
 }
 
 test('Conditional UI: after logout, the passkey from autofill logs in again', async ({ page }) => {
@@ -78,6 +80,7 @@ test('login button: username-less login in a browser without Conditional UI', as
   await expect(page.locator('#me')).toContainText('ログイン中: test-user-e2e-2');
   await expect(page.locator('#inspector')).toContainText('ログイン（受理）');
   await expect(page.locator('#inspector')).toContainText('保存値');
+  await expect(page.locator('#manga .panel.active')).toHaveAttribute('data-state', 'login:done');
 });
 
 test('transfer: the page steps up with the passkey, then the money moves', async ({ page }) => {
