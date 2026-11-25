@@ -36,7 +36,7 @@ const ui = {
   health: $('#health', HTMLPreElement),
   inspector: $('#inspector', HTMLDivElement),
   transferSection: $('#transfer-section', HTMLElement),
-  balance: $('#balance', HTMLSpanElement),
+  balance: $('#balance', HTMLElement),
   transferForm: $('#transfer-form', HTMLFormElement),
   transferSubmit: $('#transfer-form button[type=submit]', HTMLButtonElement),
   transferTo: $('#transfer-to', HTMLInputElement),
@@ -50,6 +50,8 @@ const ui = {
   attack: $('#attack', HTMLElement),
   attackButton: $('#attack-button', HTMLButtonElement),
   attackResult: $('#attack-result', HTMLPreElement),
+  attackStatus: $('#attack-status', HTMLSpanElement),
+  sessionChip: $('#session-chip', HTMLSpanElement),
 };
 
 const yen = (n: number) => n.toLocaleString('ja-JP');
@@ -70,7 +72,12 @@ function showMe(me: MeResponse | undefined, { refreshLists = true } = {}): void 
   ui.transferSection.hidden = !me;
   ui.passkeySection.hidden = !me;
   ui.attack.hidden = !me;
-  if (!me) ui.attackResult.textContent = '';
+  ui.sessionChip.textContent = me ? me.displayName : '未ログイン';
+  ui.sessionChip.dataset.state = me ? 'in' : 'out';
+  if (!me) {
+    ui.attackResult.textContent = '';
+    ui.attackStatus.hidden = true;
+  }
   if (me && refreshLists) {
     void refreshTransfers();
     void refreshPasskeys();
@@ -319,12 +326,20 @@ ui.transferForm.addEventListener('submit', (event) => {
     });
 });
 
+function setAttackStatus(text: string, kind: 'ok' | 'ng' | ''): void {
+  ui.attackStatus.hidden = false;
+  ui.attackStatus.textContent = text;
+  ui.attackStatus.className = kind ? `chip ${kind}` : 'chip';
+}
+
 ui.attackButton.addEventListener('click', () => {
   ui.attackButton.disabled = true;
   ui.attackResult.textContent = 'ニセ太が Cookie を使って送金を試みています...';
+  setAttackStatus('実行中…', '');
   runStolenCookieAttack()
-    .then(async ({ detail }) => {
+    .then(async ({ blocked, detail }) => {
       ui.attackResult.textContent = detail;
+      setAttackStatus(blocked ? 'ブロック成功（401）' : '想定外！', blocked ? 'ok' : 'ng');
       await refreshTransfers(); // the balance on screen shows nothing moved
     })
     .catch((err: unknown) => {

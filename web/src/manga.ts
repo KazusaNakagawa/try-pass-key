@@ -54,20 +54,26 @@ const label = (text: string, x: number, y: number, cls = '') =>
 
 interface Panel {
   state: PanelState;
+  /** Full line, for screen readers. */
   caption: string;
+  /** Short line shown in the speech bubble. */
+  say: string;
   scene: string;
 }
 interface Episode {
   title: string;
+  short: string;
   panels: Panel[];
 }
 
 const episodes: Episode[] = [
   {
     title: '第1話 はじめてのパスキー',
+    short: '1 登録',
     panels: [
       {
         state: 'register:input',
+        say: 'test-user-1 です！',
         caption: 'ぱすた「test-user-1 です。口座を作りたいな」',
         scene:
           figure('pasta', 55, 'idle') +
@@ -76,6 +82,7 @@ const episodes: Episode[] = [
       },
       {
         state: 'register:options',
+        say: 'この数字に署名してね',
         caption: 'サバ蔵「この数字に署名してきて。使えるのは1回だけだよ」',
         scene:
           figure('pasta', 50, 'think') +
@@ -85,6 +92,7 @@ const episodes: Episode[] = [
       },
       {
         state: 'register:authenticator',
+        say: 'ピッ（指紋）',
         caption: 'キーこ「本人確認してね」 ぱすた「ピッ（指紋）」',
         scene:
           figure('pasta', 45, 'scan') +
@@ -94,6 +102,7 @@ const episodes: Episode[] = [
       },
       {
         state: 'register:done',
+        say: '公開鍵だけ預かるね',
         caption: 'サバ蔵「公開鍵だけ預かるね」 キーこ「秘密鍵は私の中から出ません」',
         scene:
           figure('pasta', 30, 'ok') +
@@ -106,9 +115,11 @@ const episodes: Episode[] = [
   },
   {
     title: '第2話 名前を言わなくても入れる',
+    short: '2 ログイン',
     panels: [
       {
         state: 'login:idle',
+        say: '名前、なんだっけ…',
         caption: 'ぱすた「ユーザー名、なんだっけ…」',
         scene:
           figure('pasta', 100, 'think') +
@@ -117,6 +128,7 @@ const episodes: Episode[] = [
       },
       {
         state: 'login:options',
+        say: '署名してね',
         caption: 'サバ蔵「この数字に署名してね」',
         scene:
           figure('pasta', 55, 'idle') +
@@ -125,6 +137,7 @@ const episodes: Episode[] = [
       },
       {
         state: 'login:authenticator',
+        say: 'これ！ ピッ',
         caption: 'キーこ「どの鍵にする？」 ぱすた「これ！ ピッ」',
         scene:
           figure('pasta', 50, 'scan') +
@@ -135,6 +148,7 @@ const episodes: Episode[] = [
       },
       {
         state: 'login:done',
+        say: '署名OK！',
         caption: 'サバ蔵「署名OK。ぱすたさんだね」',
         scene:
           figure('pasta', 55, 'ok') +
@@ -145,9 +159,11 @@ const episodes: Episode[] = [
   },
   {
     title: '第3話 送金の前にもう一度',
+    short: '3 送金',
     panels: [
       {
         state: 'transfer:submit',
+        say: '100 送るよ',
         caption: 'ぱすた「test-user-2 に 100 送るよ」',
         scene:
           figure('pasta', 50, 'run') +
@@ -156,6 +172,7 @@ const episodes: Episode[] = [
       },
       {
         state: 'stepup:required',
+        say: '待って！もう一度本人確認',
         caption: 'サバ蔵「待って。ここだけは、もう一度本人確認」（401）',
         scene:
           figure('pasta', 45, 'think') +
@@ -165,6 +182,7 @@ const episodes: Episode[] = [
       },
       {
         state: 'stepup:authenticator',
+        say: 'この内容に署名したよ',
         caption: 'キーこ「この送金内容に、いま署名したよ」 ぱすた「ピッ」',
         scene:
           figure('pasta', 45, 'scan') +
@@ -175,6 +193,7 @@ const episodes: Episode[] = [
       },
       {
         state: 'transfer:done',
+        say: '送金完了！',
         caption: 'サバ蔵「承認は1回きり。送金完了！」',
         scene:
           figure('pasta', 45, 'ok') +
@@ -186,9 +205,11 @@ const episodes: Episode[] = [
   },
   {
     title: '第4話 盗まれたCookieは通れない（紙芝居）',
+    short: '4 攻撃',
     panels: [
       {
         state: 'attack:stolen-cookie',
+        say: 'ふふ、Cookie ゲット',
         caption: 'ニセ太「ふふ、これでぱすたになりすませる」',
         scene:
           figure('pasta', 45, 'idle') +
@@ -197,6 +218,7 @@ const episodes: Episode[] = [
       },
       {
         state: 'attack:transfer',
+        say: '100万、僕の口座へ！',
         caption: 'ニセ太「100万、僕の口座へ！」',
         scene:
           figure('nisera', 50, 'run') +
@@ -206,6 +228,7 @@ const episodes: Episode[] = [
       },
       {
         state: 'attack:stepup-required',
+        say: '署名がないよ（401）',
         caption: 'サバ蔵「入館証はOK。でも本人確認の署名がない」（401）',
         scene:
           figure('nisera', 50, 'think') +
@@ -215,6 +238,7 @@ const episodes: Episode[] = [
       },
       {
         state: 'attack:blocked',
+        say: '鍵が…ない…',
         caption: 'ニセ太「鍵が…ない…」 キーこ「秘密鍵は私の中だけだよ」',
         scene:
           figure('nisera', 45, 'ng') +
@@ -229,8 +253,8 @@ const episodes: Episode[] = [
 function panelHtml(panel: Panel, index: number): string {
   return `<li class="panel pending" data-state="${panel.state}">
     <span class="panel-no">${index + 1}</span>
-    <svg viewBox="0 0 200 130" aria-hidden="true"><line x1="0" x2="200" y1="${GROUND}" y2="${GROUND}" class="ground" />${panel.scene}</svg>
-    <p class="bubble">${panel.caption}</p>
+    <svg viewBox="0 0 200 152" aria-hidden="true"><line x1="0" x2="200" y1="${GROUND}" y2="${GROUND}" class="ground" />${panel.scene}</svg>
+    <p class="bubble">${panel.say}</p>
     <span class="fail-mark" aria-hidden="true">💦</span>
   </li>`;
 }
@@ -309,7 +333,10 @@ function play(ep: number): void {
 
 if (root && tabs && strip) {
   tabs.innerHTML = episodes
-    .map((e, i) => `<button type="button" class="manga-tab" data-ep="${i}">${e.title}</button>`)
+    .map(
+      (e, i) =>
+        `<button type="button" class="manga-tab" data-ep="${i}" title="${e.title}">${e.short}</button>`,
+    )
     .join('');
   tabs.addEventListener('click', (event) => {
     const button = event.target instanceof Element ? event.target.closest('button') : null;
