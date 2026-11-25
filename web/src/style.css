@@ -90,6 +90,12 @@ button[hidden] {
 }
 
 /* 4-panel manga (docs/05). Only the active panel animates. */
+#attack {
+  margin-top: 0.75rem;
+}
+#attack button {
+  background: color-mix(in srgb, #d33 25%, transparent);
+}
 #manga {
   margin: 1rem 0;
 }

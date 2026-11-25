@@ -4,7 +4,10 @@
  * A listener that throws is ignored, so nothing here can change how a ceremony runs.
  */
 
-/** Stages announced by the auth code. Episode 4 (attack) is story-only and never emitted. */
+/**
+ * Stages announced by the code. The attack stages come only from the demo button
+ * (web/src/attack.ts); the ceremonies themselves never emit them.
+ */
 export type AuthStage =
   | 'register:input'
   | 'register:options'
@@ -16,16 +19,14 @@ export type AuthStage =
   | 'transfer:submit'
   | 'stepup:required'
   | 'stepup:authenticator'
-  | 'transfer:done';
-
-/** Every panel state: the emitted stages plus the story-only ones. */
-export type PanelState =
-  | AuthStage
-  | 'login:idle'
+  | 'transfer:done'
   | 'attack:stolen-cookie'
   | 'attack:transfer'
   | 'attack:stepup-required'
   | 'attack:blocked';
+
+/** Every panel state: the emitted stages plus the ones only the replay shows. */
+export type PanelState = AuthStage | 'login:idle';
 
 type Listener = (stage: AuthStage | null, failed: boolean) => void;
 

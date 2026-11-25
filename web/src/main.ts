@@ -11,6 +11,7 @@ import { ApiRequestError, getJson } from './api.js';
 import { addPasskey, deletePasskey, loadCredentials } from './credentials.js';
 import { showInspection } from './inspector.js';
 import { cancelConditionalUI, loginWithPasskey, supportsConditionalUI } from './login.js';
+import { runStolenCookieAttack } from './attack.js';
 import './manga.js';
 import { registerPasskey } from './register.js';
 import { emitStage, emitStageFailed } from './stage.js';
@@ -46,6 +47,9 @@ const ui = {
   passkeyList: $('#passkey-list', HTMLUListElement),
   passkeyAdd: $('#passkey-add', HTMLButtonElement),
   passkeyResult: $('#passkey-result', HTMLPreElement),
+  attack: $('#attack', HTMLElement),
+  attackButton: $('#attack-button', HTMLButtonElement),
+  attackResult: $('#attack-result', HTMLPreElement),
 };
 
 const yen = (n: number) => n.toLocaleString('ja-JP');
@@ -65,6 +69,8 @@ function showMe(me: MeResponse | undefined, { refreshLists = true } = {}): void 
   ui.loginSection.hidden = Boolean(me);
   ui.transferSection.hidden = !me;
   ui.passkeySection.hidden = !me;
+  ui.attack.hidden = !me;
+  if (!me) ui.attackResult.textContent = '';
   if (me && refreshLists) {
     void refreshTransfers();
     void refreshPasskeys();
@@ -310,6 +316,22 @@ ui.transferForm.addEventListener('submit', (event) => {
     })
     .finally(() => {
       ui.transferSubmit.disabled = false;
+    });
+});
+
+ui.attackButton.addEventListener('click', () => {
+  ui.attackButton.disabled = true;
+  ui.attackResult.textContent = 'ニセ太が Cookie を使って送金を試みています...';
+  runStolenCookieAttack()
+    .then(async ({ detail }) => {
+      ui.attackResult.textContent = detail;
+      await refreshTransfers(); // the balance on screen shows nothing moved
+    })
+    .catch((err: unknown) => {
+      ui.attackResult.textContent = `実行できませんでした\n${message(err)}`;
+    })
+    .finally(() => {
+      ui.attackButton.disabled = false;
     });
 });
 

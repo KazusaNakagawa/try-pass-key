@@ -15,6 +15,13 @@
       <section id="manga" aria-label="4コマ漫画">
         <div class="manga-tabs" role="group" aria-label="話を選ぶ"></div>
         <ol class="manga-strip"></ol>
+        <!-- Logged in only: the page plays the thief with the session cookie but no passkey. -->
+        <div id="attack" hidden>
+          <button id="attack-button" type="button">
+            第4話を実際に動かす（Cookie だけで送金してみる）
+          </button>
+          <pre id="attack-result" aria-live="polite"></pre>
+        </div>
       </section>
 
       <section id="session-section" aria-live="polite">

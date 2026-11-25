@@ -104,6 +104,25 @@ test('transfer: the page steps up with the passkey, then the money moves', async
   await expect(page.locator('#manga .panel.active')).toHaveAttribute('data-state', 'transfer:done');
 });
 
+test('episode 4: a transfer with only the session cookie is refused and no money moves', async ({
+  page,
+}) => {
+  await addVirtualAuthenticator(page);
+  await register(page, 'test-user-e2e-8');
+  await expect(page.locator('#balance')).toHaveText('100,000');
+
+  await page.locator('#attack-button').click();
+  await expect(page.locator('#attack-result')).toContainText('step_up_required', {
+    timeout: 10_000,
+  });
+  await expect(page.locator('#manga .panel.active')).toHaveAttribute(
+    'data-state',
+    'attack:blocked',
+  );
+  await expect(page.locator('#balance')).toHaveText('100,000');
+  await expect(page.locator('#transfer-history')).not.toContainText('test-attacker-account');
+});
+
 test('transfer: the form cannot be submitted again while a step-up is running', async ({
   page,
 }) => {
