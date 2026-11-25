@@ -88,3 +88,259 @@ button[hidden] {
   font-size: 0.85rem;
   word-break: break-all;
 }
+
+/* 4-panel manga (docs/05). Only the active panel animates. */
+#manga {
+  margin: 1rem 0;
+}
+.manga-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+.manga-tab {
+  font-size: 0.8rem;
+  border-radius: 999px;
+}
+.manga-tab[aria-pressed='true'] {
+  background: color-mix(in srgb, #4a7bd0 30%, transparent);
+}
+.manga-strip {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+@media (max-width: 30rem) {
+  .manga-strip {
+    grid-template-columns: 1fr;
+  }
+}
+.panel {
+  position: relative;
+  border: 2px solid currentColor;
+  border-radius: 4px;
+  background: color-mix(in srgb, Canvas 92%, #ffd54a);
+  color: CanvasText;
+  display: flex;
+  flex-direction: column;
+  transition:
+    opacity 0.3s,
+    filter 0.3s;
+}
+.panel svg {
+  width: 100%;
+  display: block;
+}
+.panel.pending {
+  opacity: 0.35;
+  filter: grayscale(1);
+}
+.panel.active {
+  box-shadow: 0 0 0 3px #4a7bd0;
+  animation: panel-pop 0.4s ease-out;
+}
+.panel.failed {
+  box-shadow: 0 0 0 3px #d33;
+  animation: shake 0.4s;
+}
+.panel-no {
+  position: absolute;
+  top: 4px;
+  left: 8px;
+  font-weight: bold;
+  font-size: 1rem;
+}
+.bubble {
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  border-top: 2px solid currentColor;
+  background: Canvas;
+  flex: 1;
+}
+.panel.failed .bubble {
+  color: #d33;
+}
+.fail-mark {
+  display: none;
+  position: absolute;
+  top: 4px;
+  right: 6px;
+}
+.panel.failed .fail-mark {
+  display: block;
+  animation: wobble 0.8s infinite;
+}
+.panel .ground {
+  stroke: currentColor;
+  stroke-opacity: 0.3;
+}
+.panel .stroke {
+  fill: Canvas;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.panel .fill {
+  fill: currentColor;
+  stroke: none;
+}
+.panel .safe {
+  fill: #c9a227;
+  stroke: currentColor;
+  stroke-width: 1;
+}
+.panel .note {
+  fill: #fff;
+  stroke: currentColor;
+  stroke-width: 1;
+}
+.panel .mask {
+  stroke: #d33;
+  stroke-width: 3;
+}
+.panel .label {
+  fill: currentColor;
+}
+.panel .label.alert {
+  fill: #d33;
+  font-weight: bold;
+  font-size: 12px;
+}
+.panel .label.plate {
+  font-size: 8px;
+}
+.panel .keyko .swing {
+  transform-origin: -8px -48px;
+}
+.panel .prop {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.panel.active .fig .body {
+  animation: bob 1.1s ease-in-out infinite;
+}
+.panel.active .pose-ok .body {
+  animation: hop 0.6s ease-in-out infinite;
+}
+.panel.active .pose-ng .body {
+  animation: shake 0.5s 2;
+}
+.panel.active .pose-run .body {
+  animation: run-in 0.8s ease-out both;
+}
+.panel.active .keyko .swing {
+  animation: swing 1.2s ease-in-out infinite;
+}
+.panel.active .fly-left {
+  animation: fly-left 1s ease-out both;
+}
+.panel.active .fly-right {
+  animation: fly-right 1s ease-out both;
+}
+.panel.active .pop {
+  animation: pop 0.5s 0.3s ease-out both;
+}
+.panel.active .pop2 {
+  animation: pop 0.5s 0.5s ease-out both;
+}
+.panel.active .pop3 {
+  animation: pop 0.5s 0.7s ease-out both;
+}
+.panel.active .tap {
+  animation: tap 0.7s ease-in-out infinite;
+}
+.panel.active .tick {
+  animation: wobble 1s ease-in-out infinite;
+}
+.panel.active .vanish {
+  animation: vanish 1.6s ease-in both;
+}
+
+@keyframes panel-pop {
+  from {
+    transform: scale(0.94);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+@keyframes bob {
+  50% {
+    transform: translateY(-2px);
+  }
+}
+@keyframes hop {
+  50% {
+    transform: translateY(-8px);
+  }
+}
+@keyframes shake {
+  25% {
+    transform: translateX(-3px);
+  }
+  75% {
+    transform: translateX(3px);
+  }
+}
+@keyframes run-in {
+  from {
+    transform: translateX(-30px);
+  }
+}
+@keyframes swing {
+  50% {
+    transform: rotate(14deg);
+  }
+}
+@keyframes fly-left {
+  from {
+    transform: translateX(50px);
+  }
+}
+@keyframes fly-right {
+  from {
+    transform: translateX(-50px);
+  }
+}
+@keyframes pop {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.4);
+  }
+}
+@keyframes tap {
+  50% {
+    transform: translate(3px, -3px) scale(1.2);
+  }
+}
+@keyframes wobble {
+  50% {
+    transform: rotate(12deg);
+  }
+}
+@keyframes vanish {
+  60% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.6);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .panel *,
+  .panel {
+    animation: none !important;
+  }
+}

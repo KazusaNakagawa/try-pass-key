@@ -97,6 +97,8 @@ test('transfer: the page steps up with the passkey, then the money moves', async
   await expect(page.locator('#inspector')).toContainText('ステップアップ（受理）');
   await expect(page.locator('#inspector')).toContainText('S1 ✓');
   await expect(page.locator('#me')).not.toContainText('"stepupAt": null');
+  // The manga panel followed the ceremony to the last panel of episode 3 (docs/05).
+  await expect(page.locator('#manga .panel.active')).toHaveAttribute('data-state', 'transfer:done');
 });
 
 test('transfer: the form cannot be submitted again while a step-up is running', async ({

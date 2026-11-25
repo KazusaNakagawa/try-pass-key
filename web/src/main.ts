@@ -11,7 +11,9 @@ import { ApiRequestError, getJson } from './api.js';
 import { addPasskey, deletePasskey, loadCredentials } from './credentials.js';
 import { showInspection } from './inspector.js';
 import { cancelConditionalUI, loginWithPasskey, supportsConditionalUI } from './login.js';
+import './manga.js';
 import { registerPasskey } from './register.js';
+import { emitStage, emitStageFailed } from './stage.js';
 import { transferWithStepUp } from './transfer.js';
 
 /** Looks up a required element and checks its type at runtime. */
@@ -139,6 +141,7 @@ async function refreshPasskeys(): Promise<void> {
 const passkeyStepUpHooks = {
   onStepUp: () => {
     ui.passkeyResult.textContent = 'ステップアップが必要です。認証器の操作を待っています...';
+    emitStage('stepup:required');
   },
   onApproved: (stepup: StepupVerifyResponse) => {
     showInspection(ui.inspector, stepup.inspection);
@@ -215,6 +218,7 @@ async function startConditionalUI(): Promise<void> {
     conditionalFailures = 0;
     ui.loginResult.textContent = `ログインしました（オートフィル）\n${JSON.stringify(result, null, 2)}`;
     showInspection(ui.inspector, result.inspection);
+    emitStage('login:done');
     showMe(result.me);
   } catch (err) {
     // AbortError: another ceremony replaced this one. Not worth showing.
@@ -240,10 +244,12 @@ ui.loginButton.addEventListener('click', () => {
       conditionalFailures = 0;
       ui.loginResult.textContent = `ログインしました\n${JSON.stringify(result, null, 2)}`;
       showInspection(ui.inspector, result.inspection);
+      emitStage('login:done');
       showMe(result.me);
     })
     .catch((err: unknown) => {
       ui.loginResult.textContent = `ログインできませんでした\n${message(err)}`;
+      emitStageFailed();
       showInspection(ui.inspector, inspectionOf(err));
       // Dismissing the passkey sheet or a server rejection: offer autofill again.
       restartConditionalUI();
@@ -260,11 +266,13 @@ ui.registerForm.addEventListener('submit', (event) => {
       // a deleted database) is no longer the state of the page.
       ui.loginResult.textContent = '';
       ui.registerResult.textContent = `登録しました\n${JSON.stringify(result, null, 2)}`;
+      emitStage('register:done');
       showInspection(ui.inspector, result.inspection);
       await refreshMe();
     })
     .catch((err: unknown) => {
       ui.registerResult.textContent = `登録できませんでした\n${message(err)}`;
+      emitStageFailed();
       showInspection(ui.inspector, inspectionOf(err));
       restartConditionalUI();
     });
@@ -277,9 +285,11 @@ ui.transferForm.addEventListener('submit', (event) => {
   // ceremony aborts the first and whose session rotation races it.
   ui.transferSubmit.disabled = true;
   ui.transferResult.textContent = '送金しています...';
+  emitStage('transfer:submit');
   transferWithStepUp(tx, {
     onStepUp: () => {
       ui.transferResult.textContent = 'ステップアップが必要です。認証器の操作を待っています...';
+      emitStage('stepup:required');
     },
     onApproved: (stepup) => {
       showInspection(ui.inspector, stepup.inspection);
@@ -287,10 +297,12 @@ ui.transferForm.addEventListener('submit', (event) => {
   })
     .then(async (result) => {
       ui.transferResult.textContent = `送金しました\n${JSON.stringify(result, null, 2)}`;
+      emitStage('transfer:done');
       await refreshMe();
     })
     .catch(async (err: unknown) => {
       ui.transferResult.textContent = `送金できませんでした\n${message(err)}`;
+      emitStageFailed();
       // A rejected step-up carries its inspection; a failed transfer does not.
       const inspection = inspectionOf(err);
       if (inspection) showInspection(ui.inspector, inspection);
@@ -308,6 +320,7 @@ ui.logout.addEventListener('click', () => {
     ui.passkeyResult.textContent = '';
     conditionalFailures = 0;
     await refreshMe();
+    emitStage('register:input');
     void startConditionalUI();
   });
 });
@@ -325,5 +338,10 @@ async function showHealth(): Promise<void> {
 
 void showHealth();
 void refreshMe().then((me) => {
-  if (!me) void startConditionalUI();
+  if (me) {
+    emitStage('login:done');
+  } else {
+    emitStage('register:input');
+    void startConditionalUI();
+  }
 });
