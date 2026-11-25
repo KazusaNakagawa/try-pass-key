@@ -11,7 +11,10 @@ import { ApiRequestError, getJson } from './api.js';
 import { addPasskey, deletePasskey, loadCredentials } from './credentials.js';
 import { showInspection } from './inspector.js';
 import { cancelConditionalUI, loginWithPasskey, supportsConditionalUI } from './login.js';
+import { runStolenCookieAttack } from './attack.js';
+import './manga.js';
 import { registerPasskey } from './register.js';
+import { emitStage, emitStageFailed } from './stage.js';
 import { transferWithStepUp } from './transfer.js';
 
 /** Looks up a required element and checks its type at runtime. */
@@ -33,7 +36,7 @@ const ui = {
   health: $('#health', HTMLPreElement),
   inspector: $('#inspector', HTMLDivElement),
   transferSection: $('#transfer-section', HTMLElement),
-  balance: $('#balance', HTMLSpanElement),
+  balance: $('#balance', HTMLElement),
   transferForm: $('#transfer-form', HTMLFormElement),
   transferSubmit: $('#transfer-form button[type=submit]', HTMLButtonElement),
   transferTo: $('#transfer-to', HTMLInputElement),
@@ -44,6 +47,11 @@ const ui = {
   passkeyList: $('#passkey-list', HTMLUListElement),
   passkeyAdd: $('#passkey-add', HTMLButtonElement),
   passkeyResult: $('#passkey-result', HTMLPreElement),
+  attack: $('#attack', HTMLElement),
+  attackButton: $('#attack-button', HTMLButtonElement),
+  attackResult: $('#attack-result', HTMLPreElement),
+  attackStatus: $('#attack-status', HTMLSpanElement),
+  sessionChip: $('#session-chip', HTMLSpanElement),
 };
 
 const yen = (n: number) => n.toLocaleString('ja-JP');
@@ -63,6 +71,13 @@ function showMe(me: MeResponse | undefined, { refreshLists = true } = {}): void 
   ui.loginSection.hidden = Boolean(me);
   ui.transferSection.hidden = !me;
   ui.passkeySection.hidden = !me;
+  ui.attack.hidden = !me;
+  ui.sessionChip.textContent = me ? me.displayName : '未ログイン';
+  ui.sessionChip.dataset.state = me ? 'in' : 'out';
+  if (!me) {
+    ui.attackResult.textContent = '';
+    ui.attackStatus.hidden = true;
+  }
   if (me && refreshLists) {
     void refreshTransfers();
     void refreshPasskeys();
@@ -215,12 +230,14 @@ async function startConditionalUI(): Promise<void> {
     conditionalFailures = 0;
     ui.loginResult.textContent = `ログインしました（オートフィル）\n${JSON.stringify(result, null, 2)}`;
     showInspection(ui.inspector, result.inspection);
+    emitStage('login:done');
     showMe(result.me);
   } catch (err) {
     // AbortError: another ceremony replaced this one. Not worth showing.
     if (err instanceof Error && err.name === 'AbortError') return;
     ui.loginResult.textContent = `ログインできませんでした\n${message(err)}`;
     showInspection(ui.inspector, inspectionOf(err));
+    emitStageFailed();
     restartConditionalUI();
   }
 }
@@ -240,10 +257,12 @@ ui.loginButton.addEventListener('click', () => {
       conditionalFailures = 0;
       ui.loginResult.textContent = `ログインしました\n${JSON.stringify(result, null, 2)}`;
       showInspection(ui.inspector, result.inspection);
+      emitStage('login:done');
       showMe(result.me);
     })
     .catch((err: unknown) => {
       ui.loginResult.textContent = `ログインできませんでした\n${message(err)}`;
+      emitStageFailed();
       showInspection(ui.inspector, inspectionOf(err));
       // Dismissing the passkey sheet or a server rejection: offer autofill again.
       restartConditionalUI();
@@ -260,11 +279,13 @@ ui.registerForm.addEventListener('submit', (event) => {
       // a deleted database) is no longer the state of the page.
       ui.loginResult.textContent = '';
       ui.registerResult.textContent = `登録しました\n${JSON.stringify(result, null, 2)}`;
+      emitStage('register:done');
       showInspection(ui.inspector, result.inspection);
       await refreshMe();
     })
     .catch((err: unknown) => {
       ui.registerResult.textContent = `登録できませんでした\n${message(err)}`;
+      emitStageFailed();
       showInspection(ui.inspector, inspectionOf(err));
       restartConditionalUI();
     });
@@ -277,9 +298,11 @@ ui.transferForm.addEventListener('submit', (event) => {
   // ceremony aborts the first and whose session rotation races it.
   ui.transferSubmit.disabled = true;
   ui.transferResult.textContent = '送金しています...';
+  emitStage('transfer:submit');
   transferWithStepUp(tx, {
     onStepUp: () => {
       ui.transferResult.textContent = 'ステップアップが必要です。認証器の操作を待っています...';
+      emitStage('stepup:required');
     },
     onApproved: (stepup) => {
       showInspection(ui.inspector, stepup.inspection);
@@ -287,10 +310,12 @@ ui.transferForm.addEventListener('submit', (event) => {
   })
     .then(async (result) => {
       ui.transferResult.textContent = `送金しました\n${JSON.stringify(result, null, 2)}`;
+      emitStage('transfer:done');
       await refreshMe();
     })
     .catch(async (err: unknown) => {
       ui.transferResult.textContent = `送金できませんでした\n${message(err)}`;
+      emitStageFailed();
       // A rejected step-up carries its inspection; a failed transfer does not.
       const inspection = inspectionOf(err);
       if (inspection) showInspection(ui.inspector, inspection);
@@ -301,6 +326,30 @@ ui.transferForm.addEventListener('submit', (event) => {
     });
 });
 
+function setAttackStatus(text: string, kind: 'ok' | 'ng' | ''): void {
+  ui.attackStatus.hidden = false;
+  ui.attackStatus.textContent = text;
+  ui.attackStatus.className = kind ? `chip ${kind}` : 'chip';
+}
+
+ui.attackButton.addEventListener('click', () => {
+  ui.attackButton.disabled = true;
+  ui.attackResult.textContent = 'ニセ太が Cookie を使って送金を試みています...';
+  setAttackStatus('実行中…', '');
+  runStolenCookieAttack()
+    .then(async ({ blocked, detail }) => {
+      ui.attackResult.textContent = detail;
+      setAttackStatus(blocked ? 'ブロック成功（401）' : '想定外！', blocked ? 'ok' : 'ng');
+      await refreshTransfers(); // the balance on screen shows nothing moved
+    })
+    .catch((err: unknown) => {
+      ui.attackResult.textContent = `実行できませんでした\n${message(err)}`;
+    })
+    .finally(() => {
+      ui.attackButton.disabled = false;
+    });
+});
+
 ui.logout.addEventListener('click', () => {
   void fetch('/api/logout', { method: 'POST' }).then(async () => {
     ui.loginResult.textContent = '';
@@ -308,6 +357,7 @@ ui.logout.addEventListener('click', () => {
     ui.passkeyResult.textContent = '';
     conditionalFailures = 0;
     await refreshMe();
+    emitStage('register:input');
     void startConditionalUI();
   });
 });
@@ -325,5 +375,10 @@ async function showHealth(): Promise<void> {
 
 void showHealth();
 void refreshMe().then((me) => {
-  if (!me) void startConditionalUI();
+  if (me) {
+    emitStage('login:done');
+  } else {
+    emitStage('register:input');
+    void startConditionalUI();
+  }
 });

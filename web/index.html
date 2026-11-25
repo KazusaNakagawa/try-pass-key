@@ -7,105 +7,152 @@
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <main>
+    <header class="topbar">
       <h1>try-pass-key</h1>
-      <p>パスキー（WebAuthn）学習用 PoC</p>
+      <span class="sub">パスキー（WebAuthn）学習用 PoC</span>
+      <span id="session-chip" class="chip" data-state="out">未ログイン</span>
+      <button id="logout" type="button" hidden>ログアウト</button>
+    </header>
 
-      <section id="session-section" aria-live="polite">
-        <h2>ログイン状態</h2>
-        <pre id="me">確認中...</pre>
-        <!-- Outside #login-section, which is hidden once logged in, so the outcome stays visible. -->
-        <pre id="login-result" aria-live="polite"></pre>
-        <button id="logout" type="button" hidden>ログアウト</button>
-      </section>
+    <div class="layout">
+      <!-- Left: what you do. -->
+      <div class="col col-left">
+        <!-- 4-panel manga that follows the real ceremonies (docs/05). -->
+        <section id="manga" class="card" aria-label="4コマ漫画">
+          <div class="manga-tabs" role="group" aria-label="話を選ぶ"></div>
+          <ol class="manga-strip"></ol>
+          <!-- Logged in only: the page plays the thief with the session cookie but no passkey. -->
+          <div id="attack" hidden>
+            <button id="attack-button" type="button" class="danger">第4話を実際に動かす</button>
+            <span id="attack-status" class="chip" hidden></span>
+            <span class="hint">Cookie だけで送金してみる</span>
+          </div>
+        </section>
 
-      <section id="login-section">
-        <h2>パスキーでログイン</h2>
-        <form id="login-form">
-          <label>
-            ユーザー名（入力欄を選ぶと、保存済みのパスキーが候補に出ます）
-            <!-- "webauthn" in autocomplete enables Conditional UI (passkeys in autofill). -->
-            <input id="login-username" name="username" autocomplete="username webauthn" />
-          </label>
-          <button id="login-button" type="button">パスキーでログイン</button>
-        </form>
-      </section>
+        <section id="login-section" class="card">
+          <h2>パスキーでログイン</h2>
+          <form id="login-form">
+            <label>
+              ユーザー名
+              <!-- "webauthn" in autocomplete enables Conditional UI (passkeys in autofill). -->
+              <input
+                id="login-username"
+                name="username"
+                autocomplete="username webauthn"
+                placeholder="選ぶとパスキーが候補に出ます"
+              />
+            </label>
+            <button id="login-button" type="button" class="primary">パスキーでログイン</button>
+          </form>
+        </section>
 
-      <section id="register-section">
-        <h2>パスキーを作成</h2>
-        <form id="register-form">
-          <label>
-            表示名（認証器や同期先に保存されることがあります。テスト用の名前を使ってください）
-            <input
-              id="display-name"
-              name="displayName"
-              value="test-user-1"
-              maxlength="64"
-              required
-            />
-          </label>
-          <button type="submit">パスキーを作成</button>
-        </form>
-        <pre id="register-result" aria-live="polite"></pre>
-      </section>
+        <section id="register-section" class="card">
+          <h2>パスキーを作成</h2>
+          <form id="register-form">
+            <label>
+              表示名
+              <input
+                id="display-name"
+                name="displayName"
+                value="test-user-1"
+                maxlength="64"
+                required
+              />
+            </label>
+            <button type="submit" class="primary">パスキーを作成</button>
+          </form>
+          <p class="hint">
+            表示名は認証器や同期先に保存されることがあります。テスト用の名前を使ってください。
+          </p>
+        </section>
 
-      <!-- Logged in only. -->
-      <section id="transfer-section" hidden>
-        <h2>送金（模擬）</h2>
-        <p>残高: <span id="balance">-</span></p>
-        <p>
-          送金の直前にパスキーでもう一度本人確認します（ステップアップ）。承認は5分以内・1回だけ・この送金内容にだけ有効です。
-        </p>
-        <form id="transfer-form">
-          <label>
-            送金先
-            <input id="transfer-to" name="to" required maxlength="64" autocomplete="off" />
-          </label>
-          <label>
-            金額
-            <input
-              id="transfer-amount"
-              name="amount"
-              type="number"
-              required
-              min="1"
-              max="1000000"
-              step="1"
-            />
-          </label>
-          <button type="submit">送金する</button>
-        </form>
-        <pre id="transfer-result" aria-live="polite"></pre>
-        <h3>履歴（新しい順、最大20件）</h3>
-        <ul id="transfer-history"></ul>
-      </section>
+        <!-- Logged in only. -->
+        <section id="transfer-section" class="card" hidden>
+          <h2>送金（模擬）</h2>
+          <p class="balance">残高 <strong id="balance">-</strong></p>
+          <form id="transfer-form">
+            <label>
+              送金先
+              <input id="transfer-to" name="to" required maxlength="64" autocomplete="off" />
+            </label>
+            <label>
+              金額
+              <input
+                id="transfer-amount"
+                name="amount"
+                type="number"
+                required
+                min="1"
+                max="1000000"
+                step="1"
+              />
+            </label>
+            <button type="submit" class="primary">送金する</button>
+          </form>
+          <p class="hint">
+            送金の直前にパスキーでもう一度本人確認します（ステップアップ）。承認は5分以内・1回だけ・この送金内容にだけ有効です。
+          </p>
+          <h3>履歴</h3>
+          <ul id="transfer-history"></ul>
+        </section>
 
-      <!-- Logged in only. -->
-      <section id="passkey-section" hidden>
-        <h2>パスキー</h2>
-        <p>
-          追加と削除の前に、登録済みのパスキーでもう一度本人確認します（ステップアップ）。最後の1本は削除できません。
-        </p>
-        <ul id="passkey-list"></ul>
-        <button id="passkey-add" type="button">パスキーを追加</button>
-        <pre id="passkey-result" aria-live="polite"></pre>
-      </section>
+        <!-- Logged in only. -->
+        <section id="passkey-section" class="card" hidden>
+          <h2>パスキー</h2>
+          <ul id="passkey-list"></ul>
+          <button id="passkey-add" type="button" class="primary">パスキーを追加</button>
+          <p class="hint">
+            追加と削除の前に、登録済みのパスキーでもう一度本人確認します。最後の1本は削除できません。
+          </p>
+        </section>
+      </div>
 
-      <!-- Shown once a verify response carries an inspection (server INSPECTION=on). -->
-      <section id="inspector-section" hidden>
-        <h2>直近の ceremony</h2>
-        <p>
-          登録・ログイン・ステップアップ・パスキー追加でブラウザと認証器が送った値、サーバーの期待値、検証項目（docs/01
-          §6）の結果。サーバーで INSPECTION=on のときだけ表示されます。
-        </p>
-        <div id="inspector" aria-live="polite">まだありません</div>
-      </section>
+      <!-- Right: what comes back. -->
+      <aside class="col col-right" aria-label="レスポンス">
+        <section class="card response" id="session-section" aria-live="polite">
+          <h2>レスポンス</h2>
+          <div class="resp">
+            <h3>セッション</h3>
+            <pre id="me">確認中...</pre>
+          </div>
+          <div class="resp">
+            <h3>ログイン</h3>
+            <pre id="login-result" aria-live="polite"></pre>
+          </div>
+          <div class="resp">
+            <h3>登録</h3>
+            <pre id="register-result" aria-live="polite"></pre>
+          </div>
+          <div class="resp">
+            <h3>送金</h3>
+            <pre id="transfer-result" aria-live="polite"></pre>
+          </div>
+          <div class="resp">
+            <h3>パスキーの追加・削除</h3>
+            <pre id="passkey-result" aria-live="polite"></pre>
+          </div>
+          <div class="resp">
+            <h3>第4話（攻撃）</h3>
+            <pre id="attack-result" aria-live="polite"></pre>
+          </div>
+        </section>
 
-      <section>
-        <h2>サーバー状態</h2>
-        <pre id="health">確認中...</pre>
-      </section>
-    </main>
+        <!-- Shown once a verify response carries an inspection (server INSPECTION=on). -->
+        <section id="inspector-section" class="card" hidden>
+          <h2>直近の ceremony</h2>
+          <p class="hint">
+            ブラウザと認証器が送った値、サーバーの期待値、検証項目（docs/01 §6）の結果。サーバーで
+            INSPECTION=on のときだけ表示されます。
+          </p>
+          <div id="inspector" aria-live="polite">まだありません</div>
+        </section>
+
+        <section class="card">
+          <h2>サーバー状態</h2>
+          <pre id="health">確認中...</pre>
+        </section>
+      </aside>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

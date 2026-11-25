@@ -6,6 +6,7 @@ import {
 import { LoginOptionsResponse, LoginVerifyResponse } from '@app/shared';
 import { ApiRequestError, postJson } from './api.js';
 import { signalUnknown } from './signal.js';
+import { emitStage } from './stage.js';
 
 /**
  * Login ceremony (docs/01 §5.2). allowCredentials is empty, so the authenticator
@@ -16,6 +17,8 @@ import { signalUnknown } from './signal.js';
  */
 export async function loginWithPasskey(useBrowserAutofill = false): Promise<LoginVerifyResponse> {
   const started = generation;
+  // Autofill waits silently; the story starts when the user acts.
+  if (!useBrowserAutofill) emitStage('login:options');
   const request = postJson('/api/login/options', {}, LoginOptionsResponse);
   if (useBrowserAutofill) optionsInFlight = request;
   const options = await request;
@@ -24,6 +27,7 @@ export async function loginWithPasskey(useBrowserAutofill = false): Promise<Logi
   if (useBrowserAutofill && started !== generation) {
     throw new DOMException('Conditional UI was cancelled', 'AbortError');
   }
+  if (!useBrowserAutofill) emitStage('login:authenticator');
   const credential = await startAuthentication({ optionsJSON: options, useBrowserAutofill });
   try {
     return await postJson('/api/login/verify', credential, LoginVerifyResponse);

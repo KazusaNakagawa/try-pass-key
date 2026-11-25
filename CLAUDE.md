@@ -14,6 +14,7 @@ Documents under `docs/` are written in Japanese. Respond to the user in Japanese
 | `docs/02-knowledge-passkey.md` | Research notes. Anything that is not architecture goes here |
 | `docs/03-hands-on-verification.md` | How a person verifies things by hand: real devices, DB snapshot, session/cookie checks. Add steps here when a new manual check is found |
 | `docs/04-retrospective.md` | Retrospective (M8): lessons, acceptance-criteria status, remaining-risk analysis, proposals for what comes next. Update §2 when a pending check (Safari) is done |
+| `docs/05-manga-storyboard.md` | Storyboard (ネーム) for 4-panel stick-figure manga that explains each auth flow on the front screen |
 | `docs/decisions.md` | Decision log. Add a row whenever a design decision is made |
 | `docs/worklog/YYYY-MM-DD.md` | Daily work log (done / insights / issues / next) |
 | `e2e/capture/README.md` | Playwright scripts that record the GIFs and screenshots for the Zenn book (not part of the E2E suite) |

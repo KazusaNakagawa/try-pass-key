@@ -36,6 +36,8 @@ async function register(page: Page, displayName: string): Promise<void> {
   await expect(inspector).toContainText('C4 ✓');
   await expect(inspector).toContainText('UV=1');
   await expect(inspector).not.toContainText('✗');
+  // The manga followed registration to its last panel (docs/05).
+  await expect(page.locator('#manga .panel.active')).toHaveAttribute('data-state', 'register:done');
 }
 
 test('Conditional UI: after logout, the passkey from autofill logs in again', async ({ page }) => {
@@ -78,6 +80,7 @@ test('login button: username-less login in a browser without Conditional UI', as
   await expect(page.locator('#me')).toContainText('ログイン中: test-user-e2e-2');
   await expect(page.locator('#inspector')).toContainText('ログイン（受理）');
   await expect(page.locator('#inspector')).toContainText('保存値');
+  await expect(page.locator('#manga .panel.active')).toHaveAttribute('data-state', 'login:done');
 });
 
 test('transfer: the page steps up with the passkey, then the money moves', async ({ page }) => {
@@ -97,6 +100,27 @@ test('transfer: the page steps up with the passkey, then the money moves', async
   await expect(page.locator('#inspector')).toContainText('ステップアップ（受理）');
   await expect(page.locator('#inspector')).toContainText('S1 ✓');
   await expect(page.locator('#me')).not.toContainText('"stepupAt": null');
+  // The manga panel followed the ceremony to the last panel of episode 3 (docs/05).
+  await expect(page.locator('#manga .panel.active')).toHaveAttribute('data-state', 'transfer:done');
+});
+
+test('episode 4: a transfer with only the session cookie is refused and no money moves', async ({
+  page,
+}) => {
+  await addVirtualAuthenticator(page);
+  await register(page, 'test-user-e2e-8');
+  await expect(page.locator('#balance')).toHaveText('100,000');
+
+  await page.locator('#attack-button').click();
+  await expect(page.locator('#attack-result')).toContainText('step_up_required', {
+    timeout: 10_000,
+  });
+  await expect(page.locator('#manga .panel.active')).toHaveAttribute(
+    'data-state',
+    'attack:blocked',
+  );
+  await expect(page.locator('#balance')).toHaveText('100,000');
+  await expect(page.locator('#transfer-history')).not.toContainText('test-attacker-account');
 });
 
 test('transfer: the form cannot be submitted again while a step-up is running', async ({
