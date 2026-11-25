@@ -16,6 +16,7 @@ Documents under `docs/` are written in Japanese. Respond to the user in Japanese
 | `docs/04-retrospective.md` | Retrospective (M8): lessons, acceptance-criteria status, remaining-risk analysis, proposals for what comes next. Update §2 when a pending check (Safari) is done |
 | `docs/decisions.md` | Decision log. Add a row whenever a design decision is made |
 | `docs/worklog/YYYY-MM-DD.md` | Daily work log (done / insights / issues / next) |
+| `.local-docs/` | Git-ignored local materials: Playwright capture scripts and outputs for the Zenn book, and how the book was verified. Start from `.local-docs/README.md` |
 
 ## Commands
 

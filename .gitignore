@@ -8,3 +8,6 @@ playwright-report/
 test-results/
 .yarn/
 *.tsbuildinfo
+
+# Local working notes and capture materials (not published)
+.local-docs/
