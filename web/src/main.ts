@@ -141,7 +141,6 @@ async function refreshPasskeys(): Promise<void> {
 const passkeyStepUpHooks = {
   onStepUp: () => {
     ui.passkeyResult.textContent = 'ステップアップが必要です。認証器の操作を待っています...';
-    emitStage('stepup:required');
   },
   onApproved: (stepup: StepupVerifyResponse) => {
     showInspection(ui.inspector, stepup.inspection);
@@ -225,6 +224,7 @@ async function startConditionalUI(): Promise<void> {
     if (err instanceof Error && err.name === 'AbortError') return;
     ui.loginResult.textContent = `ログインできませんでした\n${message(err)}`;
     showInspection(ui.inspector, inspectionOf(err));
+    emitStageFailed();
     restartConditionalUI();
   }
 }

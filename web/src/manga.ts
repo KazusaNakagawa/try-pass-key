@@ -1,4 +1,4 @@
-import { onStage } from './stage.js';
+import { onStage, type PanelState } from './stage.js';
 
 /** Storyboard in docs/05-manga-storyboard.md, drawn as stick figures in SVG. */
 
@@ -53,7 +53,7 @@ const label = (text: string, x: number, y: number, cls = '') =>
   `<text x="${x}" y="${y}" font-size="9" text-anchor="middle" class="label ${cls}">${text}</text>`;
 
 interface Panel {
-  state: string;
+  state: PanelState;
   caption: string;
   scene: string;
 }
@@ -240,6 +240,8 @@ const tabs = root?.querySelector('.manga-tabs');
 const strip = root?.querySelector('.manga-strip');
 
 let current = -1;
+/** True while a real ceremony is in progress (from its first stage until done/failed). */
+let live = false;
 let timer: ReturnType<typeof setTimeout> | undefined;
 
 function panels(): HTMLElement[] {
@@ -256,7 +258,7 @@ function showEpisode(ep: number): void {
 }
 
 /** Marks earlier panels done, this one active (restarting its animation), later ones pending. */
-function setStage(stage: string): void {
+function setStage(stage: PanelState): void {
   const ep = episodes.findIndex((e) => e.panels.some((p) => p.state === stage));
   const episode = episodes.at(ep);
   if (!episode) return;
@@ -274,6 +276,8 @@ function setStage(stage: string): void {
 }
 
 function failStage(): void {
+  if (!live) return; // nothing real is running: don't paint a replayed or finished panel red
+  live = false;
   panels()
     .find((el) => el.classList.contains('active'))
     ?.classList.add('failed');
@@ -305,7 +309,8 @@ if (root && tabs && strip) {
     .join('');
   tabs.addEventListener('click', (event) => {
     const button = event.target instanceof Element ? event.target.closest('button') : null;
-    if (button) {
+    // Leave the panel alone while a real ceremony is running.
+    if (button && !live) {
       current = -1;
       play(Number(button.dataset.ep));
     }
@@ -314,6 +319,9 @@ if (root && tabs && strip) {
   onStage((stage, failed) => {
     stopPlayback();
     if (failed) failStage();
-    else setStage(stage);
+    else if (stage) {
+      live = !stage.endsWith(':done');
+      setStage(stage);
+    }
   });
 }

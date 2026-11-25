@@ -12,7 +12,8 @@ export const isStepUpRequired = (err: unknown) =>
  */
 export async function stepUpFor(op: StepupOperation): Promise<StepupVerifyResponse> {
   const options = await postJson('/api/stepup/options', op, StepupOptionsResponse);
-  emitStage('stepup:authenticator');
+  // Only the transfer episode tells this story; passkey add/delete step-ups stay silent.
+  if (op.kind === 'transfer') emitStage('stepup:authenticator');
   const credential = await startAuthentication({ optionsJSON: options });
   return postJson('/api/stepup/verify', credential, StepupVerifyResponse);
 }
