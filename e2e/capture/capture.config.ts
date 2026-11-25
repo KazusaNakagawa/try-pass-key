@@ -11,8 +11,11 @@ export default defineConfig({
   reporter: [['list']],
   use: {
     baseURL: `http://localhost:${process.env.WEB_PORT ?? '5173'}`,
-    viewport: { width: 900, height: 640 },
-    video: { mode: 'on', size: { width: 900, height: 640 } },
+    // Wide enough for the two-column layout (inputs left, responses right).
+    viewport: { width: 1120, height: 1000 },
+    // Dark, to match the real-device captures taken on a dark desktop.
+    colorScheme: 'dark',
+    video: { mode: 'on', size: { width: 1120, height: 1000 } },
     launchOptions: { slowMo: 250 },
   },
   projects: [{ name: 'chromium' }],

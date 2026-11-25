@@ -44,7 +44,7 @@ gif() { # name start-offset end-offset
   read -r video start end < <(clip "$1" "$2" "$3")
   cp "$video" "$out/videos/$1.webm"
   ffmpeg -loglevel error -y -ss "$start" -to "$end" -i "$out/videos/$1.webm" \
-    -vf "fps=10,scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4" \
+    -vf "fps=10,scale=900:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4" \
     "$out/shots/$1.gif"
 }
 
