@@ -8,7 +8,9 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default defineConfig(
-  { ignores: ['**/node_modules/**', '**/dist/**', '.yarn/**'] },
+  // ESLint does not read .gitignore: git-ignored local notes (.local**) must be
+  // listed here too, or a .ts file there fails the local lint.
+  { ignores: ['**/node_modules/**', '**/dist/**', '.yarn/**', '**/.local*/**'] },
 
   js.configs.recommended,
   sonarjs.configs.recommended,
