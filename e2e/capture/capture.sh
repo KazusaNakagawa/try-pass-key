@@ -18,31 +18,38 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Start from an empty output, so nothing from an earlier run (recordings,
+# clips) can be picked up. The directory is git-ignored and only holds outputs.
+rm -rf "$out"
 mkdir -p "$out/shots" "$out/videos"
-rm -f "$out/marks.json"
 
 docker compose up -d --wait
 docker compose --profile e2e run --rm e2e \
   node ../node_modules/@playwright/test/cli.js test \
   --config "/app/$here/capture.config.ts"
 
-for t in register-and-login transfer-with-step-up add-a-second-passkey; do
-  cp "$out/test-results/book-$t-chromium/video.webm" "$out/videos/$t.webm"
-done
-
-# Cut each GIF from its *-start mark to its *-end mark (seconds from the start
-# of the test, written by tests/book.spec.ts). The end mark comes before the
-# element screenshot, which would otherwise show up as a scroll at the end.
-gif() { # video name start end
-  ffmpeg -loglevel error -y -ss "$3" -to "$4" -i "$out/videos/$1.webm" \
-    -vf "fps=10,scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4" \
-    "$out/shots/$2.gif"
+# tests/book.spec.ts writes each clip's video path (inside the container) and
+# its start and end in seconds. The end comes before the element screenshot,
+# which would otherwise show up as a scroll at the end of the GIF.
+clip() { # name start-offset end-offset -> "video start end"
+  python3 -I - "$out/marks.json" "$1" "$2" "$3" <<'PY'
+import json, sys
+c = json.load(open(sys.argv[1]))[sys.argv[2]]
+start = max(0.0, c["start"] + float(sys.argv[3]))
+print(c["video"].removeprefix("/app/"), round(start, 2), round(c["end"] + float(sys.argv[4]), 2))
+PY
 }
-mark() { python3 -I -c "import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])" "$out/marks.json" "$1"; }
-sub() { python3 -I -c "import sys; print(round(float(sys.argv[1]) + float(sys.argv[2]), 2))" "$1" "$2"; }
+gif() { # name start-offset end-offset
+  local video start end
+  read -r video start end < <(clip "$1" "$2" "$3")
+  cp "$video" "$out/videos/$1.webm"
+  ffmpeg -loglevel error -y -ss "$start" -to "$end" -i "$out/videos/$1.webm" \
+    -vf "fps=10,scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4" \
+    "$out/shots/$1.gif"
+}
 
-gif register-and-login register "$(sub "$(mark register-start)" -0.3)" "$(sub "$(mark register-end)" -0.2)"
-gif register-and-login login "$(sub "$(mark login-start)" -0.2)" "$(sub "$(mark login-end)" -0.25)"
-gif transfer-with-step-up transfer "$(sub "$(mark transfer-start)" -0.3)" "$(sub "$(mark transfer-end)" -0.25)"
+gif register -0.3 -0.2
+gif login -0.2 -0.25
+gif transfer -0.3 -0.25
 
 ls -l "$out/shots"
