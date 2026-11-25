@@ -10,4 +10,4 @@ test-results/
 *.tsbuildinfo
 
 # Local working notes and capture materials (not published)
-.local-docs/
+.local**
