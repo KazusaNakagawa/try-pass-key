@@ -6,7 +6,7 @@ Zenn の Book に貼る GIF とスクリーンショットを、Playwright と�
 |---|---|
 | `capture.sh` | 入口。使い捨てスタックで撮影し、録画から GIF を切り出す |
 | `capture.config.ts` | 撮影用の Playwright 設定（録画あり、操作を 250ms ずつ遅くする） |
-| `tests/book.spec.ts` | 撮影用のシナリオ。登録とログイン、送金のステップアップ、パスキーの追加 |
+| `tests/book.spec.ts` | 撮影用のシナリオ。登録とログイン、送金のステップアップ、パスキーの追加、マンガの各話、第4話の実動、画面全体、表紙用のコマ |
 | `tools/render-mermaid.py` | Book の mermaid の図を1枚ずつ描画して PNG にする |
 
 撮影結果は Git に入れない。`.local-docs/playwright-capture/output/`（`.gitignore` 済み）に出る。
@@ -37,12 +37,24 @@ bash e2e/capture/capture.sh
 | 撮影結果 | Book での名前 | 貼っている章 |
 |---|---|---|
 | `register.gif` | `e2e-register.gif` | 2章 登録 |
+| `manga-register.png` | `manga-register.png` | 2章 登録 |
+| `manga-login.png` | `manga-login.png` | 3章 ログイン |
+| `manga-transfer.png` | `manga-transfer.png` | 6章 ステップアップ |
+| `manga-attack-real.png` | `manga-attack-real.png` | 6章 ステップアップ §1 |
+| `ui-overview.png` | `ui-overview.png` | 1章 背景と設計 |
+| `cover-panel-fingerprint.png` | （表紙の素材。下の「表紙」を参照） | `cover.png` |
 | `login.gif` | `e2e-login-autofill.gif` | 3章 ログイン §5 |
 | `inspector-register.png` | `e2e-inspector-register.png` | 4章 可視化 §4 |
 | `transfer.gif` | `e2e-transfer-stepup.gif` | 6章 ステップアップ |
 | `inspector-stepup.png` | `e2e-inspector-stepup.png` | 6章 ステップアップ §6 |
 
-`passkey-list-two.png`、`session-after-login.png`、`transfer-done.png` は撮っているが Book では使っていない。
+`passkey-list-two.png`、`session-after-login.png`、`transfer-done.png`、`manga-attack-story.png`、`ui-attack-blocked.png` は撮っているが Book では使っていない。
+
+実機で撮る画像（1Password や Apple Passwords のシート、登録成功、ログイン後、パスキー一覧）は、仮想認証器では再現できないので、このスクリプトでは撮らない。実機の画面を撮り、アカウント名やアバターは切り出して外す。
+
+## 表紙
+
+`cover-panel-fingerprint.png`（マンガの1コマを4倍の解像度で撮ったもの）を、青いグラデーションとタイトルの HTML に置き、ヘッドレス Chrome で 1000×1400 に撮って `books/passkey-poc-by-hand/cover.png` にする（手順は `~/work/zenn-docs/CLAUDE.md` の「Images and diagrams」）。コマは、スライドショーが最後のコマに進んだ後の「終わったコマ」を撮るので、選択中の枠が付かない。
 
 ## 図を確かめる
 
@@ -55,6 +67,10 @@ python3 -I e2e/capture/tools/render-mermaid.py ~/work/zenn-docs/books/passkey-po
 できた PNG を開き、`ERR` が出ていないこと、ラベルが重なっていないことを見る。
 
 ## 書くときの注意
+
+- 画面は2カラム（左に操作、右にレスポンス）で、右は固定表示でスクロールする。要素のスクリーンショットが切れないよう、`shot()` が右のペインの固定とスクロールを外してから撮る。ビューポートは 1120×1000、配色はダーク（実機の画像に合わせる）
+- 仮想認証器でパスキーがない状態だと、ページを開いた直後のオートフィルの待ち受けがすぐ失敗し、1コマ目が赤い失敗表示になる。実機では起きないので、登録の録画では `conditionalUiOff()` でオートフィルを止め、ログインの区間の前に `conditionalUiOn()` で戻す
+- マンガは、タブを押すと話ごとのスライドショーが約7秒で最後のコマまで進む。最後のコマが選択中になるのを待ってから撮る
 
 - 録画用の間（`pause`）は、見る人のためのもので同期ではない。どの手順も、間を置く前に画面の状態を `expect` で待っている
 - パスキーの追加は、最初の認証器 A でステップアップを承認させてから認証器 B に切り替える（`e2e/tests/passkey.spec.ts` と同じ手順）。先に A を外すと、ステップアップに使う鍵がなくて失敗する
